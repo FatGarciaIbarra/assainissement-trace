@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Saisie Traçabilité Vigne</title>
+<script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;1,300&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -21,9 +22,7 @@
     --erreur:    #c0392b;
     --succes:    #27ae60;
   }
-
   * { box-sizing: border-box; margin: 0; padding: 0; }
-
   body {
     font-family: 'DM Mono', monospace;
     background: var(--blanc);
@@ -31,293 +30,86 @@
     min-height: 100vh;
     padding: 0;
   }
+  .container { max-width: 680px; margin: 0 auto; padding: 24px 24px 60px; }
 
-  /* ── En-tête ── */
-  header {
-    background: var(--vert);
-    color: #fff;
-    padding: 18px 28px;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-  }
-  header .logo {
-    font-family: 'Fraunces', serif;
-    font-size: 22px;
-    font-weight: 600;
-    letter-spacing: -0.5px;
-  }
-  header .logo span {
-    font-style: italic;
-    font-weight: 300;
-    opacity: 0.8;
-  }
-  header .badge {
-    margin-left: auto;
-    background: rgba(255,255,255,0.15);
-    border: 1px solid rgba(255,255,255,0.25);
-    border-radius: 4px;
-    font-size: 11px;
-    padding: 3px 8px;
-    letter-spacing: 0.05em;
-  }
-
-  /* ── Conteneur principal ── */
-  .container {
-    max-width: 680px;
-    margin: 0 auto;
-    padding: 32px 24px 60px;
-  }
-
-  /* ── Blocs écran ── */
   .ecran { display: none; animation: fadeIn 0.25s ease; }
   .ecran.actif { display: block; }
   @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
 
-  /* ── Sections du formulaire ── */
-  .section {
-    background: #fff;
-    border: 1px solid var(--bordure);
-    border-radius: 8px;
-    margin-bottom: 16px;
-    overflow: hidden;
-  }
-  .section-titre {
-    background: var(--vert-light);
-    border-bottom: 1px solid var(--bordure);
-    padding: 10px 16px;
-    font-size: 11px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--vert);
-    font-weight: 500;
-  }
+  .section { background: #fff; border: 1px solid var(--bordure); border-radius: 8px; margin-bottom: 16px; overflow: hidden; }
+  .section-titre { background: var(--vert-light); border-bottom: 1px solid var(--bordure); padding: 10px 16px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--vert); font-weight: 500; }
   .section-corps { padding: 16px; }
 
-  /* ── Champs ── */
   .champ { margin-bottom: 14px; }
   .champ:last-child { margin-bottom: 0; }
-
-  label {
-    display: block;
-    font-size: 11px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--texte-2);
-    margin-bottom: 5px;
-  }
+  label { display: block; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--texte-2); margin-bottom: 5px; }
   label .requis { color: var(--terre); margin-left: 2px; }
 
-  input[type="text"],
-  input[type="date"],
-  input[type="number"],
-  select,
-  textarea {
-    width: 100%;
-    padding: 9px 12px;
-    font-family: 'DM Mono', monospace;
-    font-size: 13px;
-    background: var(--blanc);
-    border: 1px solid var(--bordure);
-    border-radius: 5px;
-    color: var(--texte);
-    transition: border-color 0.15s, box-shadow 0.15s;
-    appearance: none;
+  input[type="text"], input[type="date"], input[type="number"], select, textarea {
+    width: 100%; padding: 9px 12px; font-family: 'DM Mono', monospace; font-size: 13px;
+    background: var(--blanc); border: 1px solid var(--bordure); border-radius: 5px;
+    color: var(--texte); transition: border-color 0.15s, box-shadow 0.15s; appearance: none;
   }
-  input:focus, select:focus, textarea:focus {
-    outline: none;
-    border-color: var(--vert-mid);
-    box-shadow: 0 0 0 3px rgba(74,124,66,0.12);
-  }
-  input[readonly] {
-    background: var(--vert-light);
-    color: var(--vert);
-    border-color: transparent;
-    cursor: default;
-  }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--vert-mid); box-shadow: 0 0 0 3px rgba(74,124,66,0.12); }
+  input[readonly] { background: var(--vert-light); color: var(--vert); border-color: transparent; cursor: default; }
   select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%235a5a54'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
   textarea { resize: vertical; min-height: 70px; }
 
-  /* ── Info accession ── */
-  .info-accession {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    margin-top: 10px;
-  }
-  .info-item {
-    background: var(--vert-light);
-    border: 1px solid var(--bordure);
-    border-radius: 5px;
-    padding: 8px 12px;
-  }
-  .info-item .info-label {
-    font-size: 10px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--vert-mid);
-    margin-bottom: 2px;
-  }
-  .info-item .info-valeur {
-    font-size: 13px;
-    color: var(--vert);
-    font-weight: 500;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .info-methode {
-    grid-column: 1 / -1;
-    background: var(--terre-pale);
-    border-color: #e0c8b8;
-  }
+  .info-accession { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+  .info-item { background: var(--vert-light); border: 1px solid var(--bordure); border-radius: 5px; padding: 8px 12px; }
+  .info-item .info-label { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--vert-mid); margin-bottom: 2px; }
+  .info-item .info-valeur { font-size: 13px; color: var(--vert); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .info-methode { grid-column: 1 / -1; background: var(--terre-pale); border-color: #e0c8b8; }
   .info-methode .info-label { color: var(--terre); }
   .info-methode .info-valeur { color: var(--terre); }
 
-  /* ── Alerte / message ── */
-  .alerte {
-    padding: 10px 14px;
-    border-radius: 5px;
-    font-size: 12px;
-    margin-bottom: 14px;
-    display: none;
-  }
+  .alerte { padding: 10px 14px; border-radius: 5px; font-size: 12px; margin-bottom: 14px; display: none; }
   .alerte.erreur { background: #fdf0ef; border: 1px solid #f5c6c2; color: var(--erreur); display: block; }
   .alerte.succes { background: #edfaf2; border: 1px solid #b8e8cc; color: var(--succes); display: block; }
   .alerte.info   { background: var(--vert-light); border: 1px solid var(--bordure); color: var(--vert); display: block; }
 
-  /* ── Chargement ── */
-  .spinner {
-    display: inline-block;
-    width: 14px; height: 14px;
-    border: 2px solid var(--bordure);
-    border-top-color: var(--vert);
-    border-radius: 50%;
-    animation: spin 0.6s linear infinite;
-    vertical-align: middle;
-    margin-left: 6px;
-  }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--bordure); border-top-color: var(--vert); border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-left: 6px; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* ── Boutons ── */
   .btns { display: flex; gap: 10px; margin-top: 20px; }
-  .btn {
-    font-family: 'DM Mono', monospace;
-    font-size: 12px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    padding: 11px 22px;
-    border-radius: 5px;
-    border: none;
-    cursor: pointer;
-    transition: all 0.15s;
-    font-weight: 500;
-  }
-  .btn-principal {
-    background: var(--vert);
-    color: #fff;
-    flex: 1;
-  }
+  .btn { font-family: 'DM Mono', monospace; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; padding: 11px 22px; border-radius: 5px; border: none; cursor: pointer; transition: all 0.15s; font-weight: 500; }
+  .btn-principal { background: var(--vert); color: #fff; flex: 1; }
   .btn-principal:hover { background: var(--vert-mid); }
   .btn-principal:disabled { background: var(--bordure); color: var(--texte-2); cursor: not-allowed; }
-  .btn-secondaire {
-    background: transparent;
-    color: var(--texte-2);
-    border: 1px solid var(--bordure);
-  }
+  .btn-secondaire { background: transparent; color: var(--texte-2); border: 1px solid var(--bordure); }
   .btn-secondaire:hover { border-color: var(--vert-mid); color: var(--vert); }
-  .btn-danger {
-    background: var(--erreur);
-    color: #fff;
-  }
 
-  /* ── Résumé confirmation ── */
-  .resume-liste { list-style: none; }
-  .resume-item {
-    display: flex;
-    justify-content: space-between;
-    padding: 8px 0;
-    border-bottom: 1px solid var(--vert-light);
-    font-size: 13px;
-    gap: 12px;
-  }
-  .resume-item:last-child { border-bottom: none; }
-  .resume-cle {
-    color: var(--texte-2);
-    font-size: 11px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    flex-shrink: 0;
-  }
-  .resume-val { text-align: right; color: var(--texte); }
-
-  /* ── Champs dynamiques cachés ── */
   .champ-dyn { display: none; }
   .champ-dyn.visible { display: block; }
 
-  /* ── Séparateur groupe ── */
-  .groupe-label {
-    font-size: 10px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--or);
-    margin: 16px 0 8px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .groupe-label::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: var(--bordure);
-  }
+  .groupe-label { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--or); margin: 16px 0 8px; display: flex; align-items: center; gap: 8px; }
+  .groupe-label::after { content: ''; flex: 1; height: 1px; background: var(--bordure); }
 
-  /* ── Succès final ── */
-  .succes-icone {
-    width: 56px; height: 56px;
-    background: var(--succes);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto 16px;
-    font-size: 24px;
-    color: #fff;
-  }
-  .succes-titre {
-    font-family: 'Fraunces', serif;
-    font-size: 26px;
-    font-weight: 600;
-    text-align: center;
-    color: var(--vert);
-    margin-bottom: 6px;
-  }
-  .succes-sous {
-    text-align: center;
-    color: var(--texte-2);
-    font-size: 13px;
-    margin-bottom: 28px;
-  }
+  .resume-liste { list-style: none; }
+  .resume-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--vert-light); font-size: 13px; gap: 12px; }
+  .resume-item:last-child { border-bottom: none; }
+  .resume-cle { color: var(--texte-2); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; flex-shrink: 0; }
+  .resume-val { text-align: right; color: var(--texte); }
+
+  .succes-icone { width: 56px; height: 56px; background: var(--succes); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; font-size: 24px; color: #fff; }
+  .succes-titre { font-family: 'Fraunces', serif; font-size: 26px; font-weight: 600; text-align: center; color: var(--vert); margin-bottom: 6px; }
+  .succes-sous { text-align: center; color: var(--texte-2); font-size: 13px; margin-bottom: 28px; }
+
+  .chargement { text-align: center; padding: 40px; color: var(--texte-2); font-size: 13px; }
 </style>
 </head>
 <body>
-
-<header>
-  <div class="logo">Vigne<span>Trace</span></div>
-  <div class="badge">Traçabilité assainissement</div>
-</header>
-
 <div class="container">
 
-  <!-- ══════════════════════════════════════
-       ÉCRAN 1 : SAISIE
-  ══════════════════════════════════════ -->
-  <div class="ecran actif" id="ecran-saisie">
+  <!-- Chargement initial -->
+  <div id="ecran-chargement" class="chargement">
+    Connexion à Grist <span class="spinner"></span>
+  </div>
 
+  <!-- ÉCRAN SAISIE -->
+  <div class="ecran" id="ecran-saisie">
     <div id="alerte-global" class="alerte"></div>
 
-    <!-- Identification accession -->
     <div class="section">
       <div class="section-titre">Accession</div>
       <div class="section-corps">
@@ -325,7 +117,7 @@
           <label>Code intro <span class="requis">*</span></label>
           <input type="text" id="codeIntro" placeholder="Scanner ou saisir…" autocomplete="off" autofocus>
         </div>
-        <div id="info-accession" style="display:none">
+        <div id="bloc-info-accession" style="display:none">
           <div class="info-accession">
             <div class="info-item">
               <div class="info-label">Nom intro</div>
@@ -348,7 +140,6 @@
       </div>
     </div>
 
-    <!-- Étape et méthode -->
     <div class="section">
       <div class="section-titre">Étape</div>
       <div class="section-corps">
@@ -370,7 +161,6 @@
       </div>
     </div>
 
-    <!-- Infos communes -->
     <div class="section">
       <div class="section-titre">Informations</div>
       <div class="section-corps">
@@ -381,7 +171,7 @@
         <div class="champ">
           <label>Opérateur <span class="requis">*</span></label>
           <select id="operateur">
-            <option value="">— Chargement… —</option>
+            <option value="">— Choisir —</option>
           </select>
         </div>
         <div class="champ">
@@ -404,11 +194,9 @@
       </div>
     </div>
 
-    <!-- Champs dynamiques -->
     <div class="section" id="section-dyn" style="display:none">
       <div class="section-titre">Données spécifiques à l'étape</div>
-      <div class="section-corps" id="corps-dyn">
-
+      <div class="section-corps">
         <div class="champ champ-dyn" id="dyn-milieu">
           <label>Milieu</label>
           <input type="text" id="milieu">
@@ -469,8 +257,6 @@
           <label>Condition plantation</label>
           <input type="text" id="condition">
         </div>
-
-        <!-- Tests sanitaires -->
         <div class="champ champ-dyn" id="dyn-tests">
           <div class="groupe-label">Tests sanitaires</div>
           <div class="champ">
@@ -501,7 +287,6 @@
             </select>
           </div>
         </div>
-
       </div>
     </div>
 
@@ -509,13 +294,9 @@
       <button class="btn btn-secondaire" onclick="reinitialiser()">Réinitialiser</button>
       <button class="btn btn-principal" onclick="allerConfirmation()">Vérifier →</button>
     </div>
+  </div>
 
-  </div><!-- fin écran-saisie -->
-
-
-  <!-- ══════════════════════════════════════
-       ÉCRAN 2 : CONFIRMATION
-  ══════════════════════════════════════ -->
+  <!-- ÉCRAN CONFIRMATION -->
   <div class="ecran" id="ecran-confirmation">
     <div class="section">
       <div class="section-titre">Récapitulatif — vérifier avant d'enregistrer</div>
@@ -525,208 +306,179 @@
     </div>
     <div id="alerte-enreg" class="alerte"></div>
     <div class="btns">
-      <button class="btn btn-secondaire" onclick="allerSaisie()">← Modifier</button>
+      <button class="btn btn-secondaire" onclick="afficherEcran('ecran-saisie')">← Modifier</button>
       <button class="btn btn-principal" id="btn-enregistrer" onclick="enregistrer()">Enregistrer</button>
     </div>
   </div>
 
-
-  <!-- ══════════════════════════════════════
-       ÉCRAN 3 : SUCCÈS
-  ══════════════════════════════════════ -->
+  <!-- ÉCRAN SUCCÈS -->
   <div class="ecran" id="ecran-succes">
     <div class="succes-icone">✓</div>
     <div class="succes-titre">Enregistré !</div>
-    <div class="succes-sous" id="succes-msg">La saisie a été ajoutée dans Suivi.</div>
-    <div id="alerte-positif" class="alerte" style="display:none"></div>
+    <div class="succes-sous" id="succes-msg"></div>
+    <div id="alerte-positif" class="alerte"></div>
     <div class="btns" style="justify-content:center">
       <button class="btn btn-principal" onclick="nouvelleAccession()">Nouvelle saisie</button>
       <button class="btn btn-secondaire" onclick="memeAccession()">Même accession</button>
     </div>
   </div>
 
-</div><!-- fin container -->
+</div>
 
 <script>
-// ══════════════════════════════════════════════
-// CONFIGURATION — REMPLACE CES DEUX VALEURS
-// ══════════════════════════════════════════════
-const GRIST_API_KEY = "262c2a5ae02d0373c5e178ded1597de0c3b94c7e";
-const GRIST_DOC_ID  = "etTmr9MwGRsK/Teste";
-const GRIST_BASE    = "https://grist.numerique.gouv.fr/api";
-// ══════════════════════════════════════════════
-
-const HEADERS = {
-  "Authorization": "Bearer " + GRIST_API_KEY,
-  "Content-Type": "application/json"
-};
-
-// Cache des données Grist
+// Cache des données
 let cacheAccessions = {};
 let cacheOperateurs = [];
 let cacheEtapes     = [];
+let saisie          = {};
 
-// Données de la saisie en cours
-let saisie = {};
-
-// ── Champs dynamiques par étape ──
+// Champs dynamiques par étape
 const CHAMPS_ETAPE = {
-  "A_CULTURE_IV":       ["milieu","nbApex","contamination","reussite"],
-  "A_MULT_BOUTURES":    [],
-  "A_THERMOTHERAPIE":   [],
-  "A_REGEN_MERISTE":    ["milieu","nbMeristemes","reussite"],
-  "A_MULT_PLANTES":     ["numMeristeme"],
-  "B_CAISSON_CHAUD":    ["mort"],
-  "B_CRYOTHERAPIE":     ["nbMeristemes"],
-  "B_REGEN_MERISTE":    ["nbTigelles","mort","reussite"],
-  "B_MULT_PLANTES":     ["numMeristeme"],
-  "C_CAISSON_CHAUD":    ["mort"],
-  "C_MICROGREFFAGE":    ["nbMeristemes","reussite"],
-  "C_BOUTURAGE_IV":     ["codeMicrogreffe","nbMicrogreffes"],
-  "F_TRANSMISSION_INRAE":["nbPlants"],
-  "F_ACCLIMATATION":    ["nbPlants","mort","reussite"],
-  "F_TEST_SANITAIRE_PCR":["tests"],
+  "A_CULTURE_IV":          ["milieu","nbApex","contamination"],
+  "A_MULT_BOUTURES":       [],
+  "A_THERMOTHERAPIE":      [],
+  "A_REGEN_MERISTE":       ["milieu","nbMeristemes"],
+  "A_MULT_PLANTES":        ["numMeristeme"],
+  "B_CAISSON_CHAUD":       ["mort"],
+  "B_CRYOTHERAPIE":        ["nbMeristemes"],
+  "B_REGEN_MERISTE":       ["nbTigelles","mort"],
+  "B_MULT_PLANTES":        ["numMeristeme"],
+  "C_CAISSON_CHAUD":       ["mort"],
+  "C_MICROGREFFAGE":       ["nbMeristemes"],
+  "C_BOUTURAGE_IV":        ["codeMicrogreffe","nbMicrogreffes"],
+  "F_TRANSMISSION_INRAE":  ["nbPlants"],
+  "F_ACCLIMATATION":       ["nbPlants","mort"],
+  "F_TEST_SANITAIRE_PCR":  ["tests"],
   "F_TEST_SANITAIRE_ELISA":["tests"],
-  "F_SERRE_CHAUDE":     ["mort"],
-  "F_SERRE_FROIDE":     ["mort"],
-  "F_RECOLTE_BOIS":     ["nbSarments"],
-  "F_RECOLTE_DOUBLON":  ["nbSarments"],
-  "F_DOUBLON_SECU":     ["mort"],
-  "F_TEC_SAINES":       [],
-  "F_TRANSMISSION_PEP": ["nbGreffons"],
-  "F_GREFFAGE":         ["reussite"],
-  "F_RECEPTION_PECH":   [],
-  "F_PLANTATION":       ["reussite"],
-  "F_SUIVI_PLANTATION": ["condition"],
-  "CHGT_METHODE":       [],
-  "RECEPTION":          [],
-  "TEC_VIROSEES":       [],
-  "DEBOURREMENT":       ["reussite"],
+  "F_SERRE_CHAUDE":        ["mort"],
+  "F_SERRE_FROIDE":        ["mort"],
+  "F_RECOLTE_BOIS":        ["nbSarments"],
+  "F_RECOLTE_DOUBLON":     ["nbSarments"],
+  "F_DOUBLON_SECU":        ["mort"],
+  "F_TEC_SAINES":          [],
+  "F_TRANSMISSION_PEP":    ["nbGreffons"],
+  "F_GREFFAGE":            [],
+  "F_RECEPTION_PECH":      [],
+  "F_PLANTATION":          [],
+  "F_SUIVI_PLANTATION":    ["condition"],
+  "CHGT_METHODE":          [],
+  "RECEPTION":             [],
+  "TEC_VIROSEES":          [],
+  "DEBOURREMENT":          [],
 };
 
-// ── Init ──
-window.addEventListener("DOMContentLoaded", async () => {
-  // Date du jour par défaut
+// ── Init Grist SDK ──
+grist.ready({ requiredAccess: "full" });
+
+grist.on("ready", async () => {
+  await chargerDonnees();
+  document.getElementById("ecran-chargement").style.display = "none";
   document.getElementById("date").value = new Date().toISOString().split("T")[0];
+  afficherEcran("ecran-saisie");
 
-  await Promise.all([chargerOperateurs(), chargerEtapes(), chargerAccessions()]);
-
-  // Écoute CodeIntro
-  document.getElementById("codeIntro").addEventListener("input", debounce(rechercherAccession, 400));
+  document.getElementById("codeIntro").addEventListener("input", debounce(rechercherAccession, 350));
   document.getElementById("codeIntro").addEventListener("change", rechercherAccession);
-
-  // Écoute méthode → recharge étapes
   document.getElementById("methode").addEventListener("change", filtrerEtapes);
-
-  // Écoute étape → champs dynamiques
   document.getElementById("etape").addEventListener("change", afficherChampsDynamiques);
+  document.getElementById("codeIntro").focus();
 });
 
 function debounce(fn, ms) {
   let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
 }
 
-// ── Chargement données Grist ──
-async function chargerOperateurs() {
+// ── Chargement données via SDK ──
+async function chargerDonnees() {
   try {
-    const r = await fetch(`${GRIST_BASE}/docs/${GRIST_DOC_ID}/tables/Operateurs/records`, { headers: HEADERS });
-    const d = await r.json();
-    cacheOperateurs = d.records.map(r => ({ id: r.id, nom: r.fields.NomOperateur }));
-    const sel = document.getElementById("operateur");
-    sel.innerHTML = '<option value="">— Choisir —</option>';
-    cacheOperateurs.sort((a,b) => a.nom.localeCompare(b.nom)).forEach(op => {
-      sel.innerHTML += `<option value="${op.id}">${op.nom}</option>`;
+    // Opérateurs
+    const ops = await grist.docApi.fetchTable("Operateurs");
+    cacheOperateurs = ops.id.map((id, i) => ({ id, nom: ops.NomOperateur[i] || "" }))
+                          .sort((a,b) => a.nom.localeCompare(b.nom));
+    const selOp = document.getElementById("operateur");
+    selOp.innerHTML = '<option value="">— Choisir —</option>';
+    cacheOperateurs.forEach(op => {
+      selOp.innerHTML += `<option value="${op.id}">${op.nom}</option>`;
     });
-  } catch(e) { afficherAlerte("alerte-global", "Impossible de charger les opérateurs. Vérifie la clé API.", "erreur"); }
-}
 
-async function chargerEtapes() {
-  try {
-    const r = await fetch(`${GRIST_BASE}/docs/${GRIST_DOC_ID}/tables/Ref_Etapes/records`, { headers: HEADERS });
-    const d = await r.json();
-    cacheEtapes = d.records.map(r => ({
-      id:      r.id,
-      code:    r.fields.CodeEtape,
-      nom:     r.fields.NomEtape,
-      methode: r.fields.Methode,
-      ordre:   r.fields.OrdreAffichage
+    // Étapes
+    const etapes = await grist.docApi.fetchTable("Ref_Etapes");
+    cacheEtapes = etapes.id.map((id, i) => ({
+      id,
+      code:    etapes.CodeEtape[i],
+      nom:     etapes.NomEtape[i],
+      methode: etapes.Methode[i],
+      ordre:   etapes.OrdreAffichage[i]
     })).sort((a,b) => a.ordre - b.ordre);
-  } catch(e) { console.error("Erreur chargement étapes", e); }
-}
 
-async function chargerAccessions() {
-  try {
-    const r = await fetch(`${GRIST_BASE}/docs/${GRIST_DOC_ID}/tables/Accessions/records`, { headers: HEADERS });
-    const d = await r.json();
-    d.records.forEach(rec => {
-      cacheAccessions[rec.fields.CodeIntro] = {
-        id:           rec.id,
-        nomIntro:     rec.fields.NomIntro     || "—",
-        codeVar:      rec.fields.CodeVar      || "—",
-        nomVar:       rec.fields.NomVar       || "—",
-        methodeActive:rec.fields.MethodeActive|| ""
-      };
+    // Accessions
+    const accs = await grist.docApi.fetchTable("Accessions");
+    accs.id.forEach((id, i) => {
+      const code = accs.CodeIntro[i];
+      if (code) {
+        cacheAccessions[code.toUpperCase()] = {
+          id,
+          nomIntro:      accs.NomIntro[i]      || "—",
+          codeVar:       accs.CodeVar[i]        || "—",
+          nomVar:        accs.NomVar[i]         || "—",
+          methodeActive: accs.MethodeActive[i]  || ""
+        };
+      }
     });
-  } catch(e) { console.error("Erreur chargement accessions", e); }
+
+  } catch(e) {
+    afficherAlerte("alerte-global", "Erreur de chargement des données : " + e.message, "erreur");
+    console.error(e);
+  }
 }
 
-// ── Recherche accession au scan ──
+// ── Recherche accession ──
 function rechercherAccession() {
   const code = document.getElementById("codeIntro").value.trim().toUpperCase();
-  const bloc = document.getElementById("info-accession");
+  const bloc = document.getElementById("bloc-info-accession");
+  masquerAlerte("alerte-global");
   if (!code) { bloc.style.display = "none"; return; }
 
-  const acc = cacheAccessions[code] || cacheAccessions[Object.keys(cacheAccessions).find(k => k.toUpperCase() === code)];
+  const acc = cacheAccessions[code];
   if (acc) {
     document.getElementById("inf-nomIntro").textContent = acc.nomIntro;
     document.getElementById("inf-codeVar").textContent  = acc.codeVar;
     document.getElementById("inf-nomVar").textContent   = acc.nomVar;
     document.getElementById("inf-methode").textContent  = acc.methodeActive || "Aucune";
     bloc.style.display = "block";
-    // Pré-remplir la méthode
     if (acc.methodeActive) {
       document.getElementById("methode").value = acc.methodeActive;
       filtrerEtapes();
     }
-    masquerAlerte("alerte-global");
   } else {
     bloc.style.display = "none";
     if (code.length > 2) afficherAlerte("alerte-global", `Code "${code}" introuvable dans Accessions.`, "erreur");
   }
 }
 
-// ── Filtrage étapes selon méthode ──
+// ── Filtrage étapes ──
 function filtrerEtapes() {
   const methode = document.getElementById("methode").value;
   const sel = document.getElementById("etape");
   sel.innerHTML = '<option value="">— Choisir —</option>';
   if (!methode) return;
-  const filtrees = cacheEtapes.filter(e => e.methode === methode || e.methode === "Commune");
-  filtrees.forEach(e => {
-    sel.innerHTML += `<option value="${e.code}" data-id="${e.id}">${e.nom}</option>`;
-  });
+  cacheEtapes
+    .filter(e => e.methode === methode || e.methode === "Commune")
+    .forEach(e => { sel.innerHTML += `<option value="${e.code}" data-id="${e.id}">${e.nom}</option>`; });
   afficherChampsDynamiques();
 }
 
 // ── Champs dynamiques ──
 function afficherChampsDynamiques() {
-  const codeEtape = document.getElementById("etape").value;
-  const champsActifs = CHAMPS_ETAPE[codeEtape] || [];
-  const tousLesDyn = document.querySelectorAll(".champ-dyn");
-  tousLesDyn.forEach(el => el.classList.remove("visible"));
-
-  champsActifs.forEach(c => {
-    const el = document.getElementById("dyn-" + c);
-    if (el) el.classList.add("visible");
-  });
-
-  document.getElementById("section-dyn").style.display = champsActifs.length > 0 ? "block" : "none";
+  const code = document.getElementById("etape").value;
+  const actifs = CHAMPS_ETAPE[code] || [];
+  document.querySelectorAll(".champ-dyn").forEach(el => el.classList.remove("visible"));
+  actifs.forEach(c => { const el = document.getElementById("dyn-" + c); if (el) el.classList.add("visible"); });
+  document.getElementById("section-dyn").style.display = actifs.length > 0 ? "block" : "none";
 }
 
-// ── Validation et confirmation ──
+// ── Validation ──
 function allerConfirmation() {
   masquerAlerte("alerte-global");
-
   const codeIntro = document.getElementById("codeIntro").value.trim();
   const methode   = document.getElementById("methode").value;
   const etape     = document.getElementById("etape").value;
@@ -739,127 +491,113 @@ function allerConfirmation() {
   if (!date)      return afficherAlerte("alerte-global", "La date est obligatoire.", "erreur");
   if (!operateur) return afficherAlerte("alerte-global", "L'opérateur est obligatoire.", "erreur");
 
-  // Récupérer l'ID de l'accession
   const codeUp = codeIntro.toUpperCase();
-  const acc = cacheAccessions[codeIntro] || cacheAccessions[Object.keys(cacheAccessions).find(k => k.toUpperCase() === codeUp)];
-
-  // Récupérer l'ID de l'étape
+  const acc = cacheAccessions[codeUp];
   const etapeOpt = document.querySelector(`#etape option[value="${etape}"]`);
-  const etapeId  = etapeOpt ? parseInt(etapeOpt.dataset.id) : null;
 
   saisie = {
-    CodeIntro:       acc ? acc.id : null,
-    CodeIntroTexte:  codeIntro,
-    Methode:         methode,
-    Etape:           etapeId,
-    EtapeTexte:      etapeOpt ? etapeOpt.textContent : etape,
-    Date:            date,
-    Operateur:       parseInt(operateur),
-    OperateurTexte:  document.querySelector(`#operateur option[value="${operateur}"]`)?.textContent || "",
-    Emplacement:     document.getElementById("emplacement").value,
-    Reussite:        document.getElementById("reussite").value,
-    Commentaires:    document.getElementById("commentaires").value,
-    Milieu:          document.getElementById("milieu").value,
-    NbApex:          parseInt(document.getElementById("nbApex").value) || null,
-    Contamination:   document.getElementById("contamination").value,
-    NbMeristemes:    parseInt(document.getElementById("nbMeristemes").value) || null,
-    NumMeristeme:    document.getElementById("numMeristeme").value,
-    Mort:            document.getElementById("mort").value,
-    NbTigelles:      parseInt(document.getElementById("nbTigelles").value) || null,
-    CodeMicrogreffe: document.getElementById("codeMicrogreffe").value,
-    NbMicrogreffes:  parseInt(document.getElementById("nbMicrogreffes").value) || null,
-    NbPlants:        parseInt(document.getElementById("nbPlants").value) || null,
-    NbSarments:      parseInt(document.getElementById("nbSarments").value) || null,
-    NbGreffons:      parseInt(document.getElementById("nbGreffons").value) || null,
-    Condition:       document.getElementById("condition").value,
-    Test_CN:         document.getElementById("testCN").value,
-    Test_Enr:        document.getElementById("testEnr").value,
-    Test_Marb:       document.getElementById("testMarb").value,
+    CodeIntro:        acc ? acc.id : null,
+    CodeIntroTexte:   codeIntro,
+    Methode:          methode,
+    Etape:            etapeOpt ? parseInt(etapeOpt.dataset.id) : null,
+    EtapeTexte:       etapeOpt ? etapeOpt.textContent : etape,
+    Date:             date,
+    Operateur:        parseInt(operateur),
+    OperateurTexte:   document.querySelector(`#operateur option[value="${operateur}"]`)?.textContent || "",
+    Emplacement:      document.getElementById("emplacement").value,
+    Reussite:         document.getElementById("reussite").value,
+    Commentaires:     document.getElementById("commentaires").value,
+    Milieu:           document.getElementById("milieu").value,
+    NbApex:           parseInt(document.getElementById("nbApex").value) || null,
+    Contamination:    document.getElementById("contamination").value,
+    NbMeristemes:     parseInt(document.getElementById("nbMeristemes").value) || null,
+    NumMeristeme:     document.getElementById("numMeristeme").value,
+    Mort:             document.getElementById("mort").value,
+    NbTigelles:       parseInt(document.getElementById("nbTigelles").value) || null,
+    CodeMicrogreffe:  document.getElementById("codeMicrogreffe").value,
+    NbMicrogreffes:   parseInt(document.getElementById("nbMicrogreffes").value) || null,
+    NbPlants:         parseInt(document.getElementById("nbPlants").value) || null,
+    NbSarments:       parseInt(document.getElementById("nbSarments").value) || null,
+    NbGreffons:       parseInt(document.getElementById("nbGreffons").value) || null,
+    Condition:        document.getElementById("condition").value,
+    Test_CN:          document.getElementById("testCN").value,
+    Test_Enr:         document.getElementById("testEnr").value,
+    Test_Marb:        document.getElementById("testMarb").value,
   };
 
-  // Construire le résumé
+  // Résumé
   const items = [
     ["Code intro",  saisie.CodeIntroTexte],
     ["Méthode",     saisie.Methode],
     ["Étape",       saisie.EtapeTexte],
     ["Date",        saisie.Date],
     ["Opérateur",   saisie.OperateurTexte],
-    saisie.Emplacement  ? ["Emplacement",     saisie.Emplacement]  : null,
-    saisie.Reussite     ? ["Réussite",        saisie.Reussite]     : null,
-    saisie.Commentaires ? ["Commentaires",    saisie.Commentaires] : null,
-    saisie.Milieu       ? ["Milieu",          saisie.Milieu]       : null,
-    saisie.NbApex       ? ["Nb apex",         saisie.NbApex]       : null,
-    saisie.Contamination? ["Contamination",   saisie.Contamination]: null,
-    saisie.NbMeristemes ? ["Nb méristèmes",   saisie.NbMeristemes] : null,
-    saisie.NumMeristeme ? ["N° méristème",    saisie.NumMeristeme] : null,
-    saisie.Mort         ? ["État",            saisie.Mort]         : null,
-    saisie.NbTigelles   ? ["Nb tigelles",     saisie.NbTigelles]   : null,
-    saisie.CodeMicrogreffe?["Code microgreffe",saisie.CodeMicrogreffe]:null,
-    saisie.NbMicrogreffes?["Nb microgreffes", saisie.NbMicrogreffes]:null,
-    saisie.NbPlants     ? ["Nb plants",       saisie.NbPlants]     : null,
-    saisie.NbSarments   ? ["Nb sarments",     saisie.NbSarments]   : null,
-    saisie.NbGreffons   ? ["Nb greffons",     saisie.NbGreffons]   : null,
-    saisie.Condition    ? ["Condition",       saisie.Condition]    : null,
-    saisie.Test_CN      ? ["Test CN",         saisie.Test_CN]      : null,
-    saisie.Test_Enr     ? ["Test Enr",        saisie.Test_Enr]     : null,
-    saisie.Test_Marb    ? ["Test Marb",       saisie.Test_Marb]    : null,
+    saisie.Emplacement   ? ["Emplacement",      saisie.Emplacement]   : null,
+    saisie.Reussite      ? ["Réussite",          saisie.Reussite]      : null,
+    saisie.Commentaires  ? ["Commentaires",      saisie.Commentaires]  : null,
+    saisie.Milieu        ? ["Milieu",            saisie.Milieu]        : null,
+    saisie.NbApex        ? ["Nb apex",           saisie.NbApex]        : null,
+    saisie.Contamination ? ["Contamination",     saisie.Contamination] : null,
+    saisie.NbMeristemes  ? ["Nb méristèmes",     saisie.NbMeristemes]  : null,
+    saisie.NumMeristeme  ? ["N° méristème",      saisie.NumMeristeme]  : null,
+    saisie.Mort          ? ["État",              saisie.Mort]          : null,
+    saisie.NbTigelles    ? ["Nb tigelles",       saisie.NbTigelles]    : null,
+    saisie.CodeMicrogreffe?["Code microgreffe",  saisie.CodeMicrogreffe]:null,
+    saisie.NbMicrogreffes? ["Nb microgreffes",   saisie.NbMicrogreffes]:null,
+    saisie.NbPlants      ? ["Nb plants",         saisie.NbPlants]      : null,
+    saisie.NbSarments    ? ["Nb sarments",       saisie.NbSarments]    : null,
+    saisie.NbGreffons    ? ["Nb greffons",       saisie.NbGreffons]    : null,
+    saisie.Condition     ? ["Condition",         saisie.Condition]     : null,
+    saisie.Test_CN       ? ["Test CN",           saisie.Test_CN]       : null,
+    saisie.Test_Enr      ? ["Test Enr",          saisie.Test_Enr]      : null,
+    saisie.Test_Marb     ? ["Test Marb",         saisie.Test_Marb]     : null,
   ].filter(Boolean);
 
-  const liste = document.getElementById("resume-liste");
-  liste.innerHTML = items.map(([k,v]) =>
+  document.getElementById("resume-liste").innerHTML = items.map(([k,v]) =>
     `<li class="resume-item"><span class="resume-cle">${k}</span><span class="resume-val">${v}</span></li>`
   ).join("");
 
   afficherEcran("ecran-confirmation");
 }
 
-// ── Enregistrement dans Grist ──
+// ── Enregistrement via SDK ──
 async function enregistrer() {
   const btn = document.getElementById("btn-enregistrer");
   btn.disabled = true;
   btn.innerHTML = 'Enregistrement <span class="spinner"></span>';
   masquerAlerte("alerte-enreg");
 
-  // Construire les champs à envoyer (on n'envoie pas les nulls/vides)
   const fields = {};
-  if (saisie.CodeIntro)    fields.CodeIntro    = saisie.CodeIntro;
-  if (saisie.Methode)      fields.Methode      = saisie.Methode;
-  if (saisie.Etape)        fields.Etape        = saisie.Etape;
-  if (saisie.Date)         fields.Date         = saisie.Date;
-  if (saisie.Operateur)    fields.Operateur    = saisie.Operateur;
-  if (saisie.Emplacement)  fields.Emplacement  = saisie.Emplacement;
-  if (saisie.Reussite)     fields.Reussite     = saisie.Reussite;
-  if (saisie.Commentaires) fields.Commentaires = saisie.Commentaires;
-  if (saisie.Milieu)       fields.Milieu       = saisie.Milieu;
-  if (saisie.NbApex)       fields.NbApex       = saisie.NbApex;
-  if (saisie.Contamination)fields.Contamination= saisie.Contamination;
-  if (saisie.NbMeristemes) fields.NbMeristemes = saisie.NbMeristemes;
-  if (saisie.NumMeristeme) fields.NumMeristeme = saisie.NumMeristeme;
-  if (saisie.Mort)         fields.Mort         = saisie.Mort;
-  if (saisie.NbTigelles)   fields.NbTigelles   = saisie.NbTigelles;
+  if (saisie.CodeIntro)     fields.CodeIntro     = ["R", saisie.CodeIntro];
+  if (saisie.Methode)       fields.Methode       = saisie.Methode;
+  if (saisie.Etape)         fields.Etape         = ["R", saisie.Etape];
+  if (saisie.Date)          fields.Date          = saisie.Date;
+  if (saisie.Operateur)     fields.Operateur     = ["R", saisie.Operateur];
+  if (saisie.Emplacement)   fields.Emplacement   = saisie.Emplacement;
+  if (saisie.Reussite)      fields.Reussite      = saisie.Reussite;
+  if (saisie.Commentaires)  fields.Commentaires  = saisie.Commentaires;
+  if (saisie.Milieu)        fields.Milieu        = saisie.Milieu;
+  if (saisie.NbApex)        fields.NbApex        = saisie.NbApex;
+  if (saisie.Contamination) fields.Contamination = saisie.Contamination;
+  if (saisie.NbMeristemes)  fields.NbMeristemes  = saisie.NbMeristemes;
+  if (saisie.NumMeristeme)  fields.NumMeristeme  = saisie.NumMeristeme;
+  if (saisie.Mort)          fields.Mort          = saisie.Mort;
+  if (saisie.NbTigelles)    fields.NbTigelles    = saisie.NbTigelles;
   if (saisie.CodeMicrogreffe) fields.CodeMicrogreffe = saisie.CodeMicrogreffe;
   if (saisie.NbMicrogreffes)  fields.NbMicrogreffes  = saisie.NbMicrogreffes;
-  if (saisie.NbPlants)     fields.NbPlants     = saisie.NbPlants;
-  if (saisie.NbSarments)   fields.NbSarments   = saisie.NbSarments;
-  if (saisie.NbGreffons)   fields.NbGreffons   = saisie.NbGreffons;
-  if (saisie.Condition)    fields.Condition    = saisie.Condition;
-  if (saisie.Test_CN)      fields.Test_CN      = saisie.Test_CN;
-  if (saisie.Test_Enr)     fields.Test_Enr     = saisie.Test_Enr;
-  if (saisie.Test_Marb)    fields.Test_Marb    = saisie.Test_Marb;
+  if (saisie.NbPlants)      fields.NbPlants      = saisie.NbPlants;
+  if (saisie.NbSarments)    fields.NbSarments    = saisie.NbSarments;
+  if (saisie.NbGreffons)    fields.NbGreffons    = saisie.NbGreffons;
+  if (saisie.Condition)     fields.Condition     = saisie.Condition;
+  if (saisie.Test_CN)       fields.Test_CN       = saisie.Test_CN;
+  if (saisie.Test_Enr)      fields.Test_Enr      = saisie.Test_Enr;
+  if (saisie.Test_Marb)     fields.Test_Marb     = saisie.Test_Marb;
 
   try {
-    const r = await fetch(`${GRIST_BASE}/docs/${GRIST_DOC_ID}/tables/Suivi/records`, {
-      method: "POST",
-      headers: HEADERS,
-      body: JSON.stringify({ records: [{ fields }] })
-    });
+    await grist.docApi.applyUserActions([
+      ["AddRecord", "Suivi", null, fields]
+    ]);
 
-    if (!r.ok) {
-      const err = await r.json();
-      throw new Error(err.error || r.statusText);
-    }
-
-    // Vérifier test positif
     const testPositif = [saisie.Test_CN, saisie.Test_Enr, saisie.Test_Marb].includes("Positif");
     document.getElementById("succes-msg").textContent =
       `Saisie enregistrée pour ${saisie.CodeIntroTexte} — ${saisie.EtapeTexte}.`;
@@ -876,7 +614,7 @@ async function enregistrer() {
     afficherEcran("ecran-succes");
 
   } catch(e) {
-    afficherAlerte("alerte-enreg", "Erreur lors de l'enregistrement : " + e.message, "erreur");
+    afficherAlerte("alerte-enreg", "Erreur : " + e.message, "erreur");
     btn.disabled = false;
     btn.textContent = "Enregistrer";
   }
@@ -888,30 +626,24 @@ function afficherEcran(id) {
   document.getElementById(id).classList.add("actif");
   window.scrollTo(0, 0);
 }
-function allerSaisie()        { afficherEcran("ecran-saisie"); }
-function allerConfirmation2() { allerConfirmation(); }
 
 function reinitialiser() {
-  document.getElementById("codeIntro").value = "";
-  document.getElementById("methode").value   = "";
-  document.getElementById("etape").innerHTML = '<option value="">— Choisir la méthode d\'abord —</option>';
-  document.getElementById("date").value      = new Date().toISOString().split("T")[0];
-  document.getElementById("operateur").value = "";
-  document.getElementById("emplacement").value = "";
-  document.getElementById("reussite").value  = "";
+  document.getElementById("codeIntro").value    = "";
+  document.getElementById("methode").value      = "";
+  document.getElementById("etape").innerHTML    = '<option value="">— Choisir la méthode d\'abord —</option>';
+  document.getElementById("date").value         = new Date().toISOString().split("T")[0];
+  document.getElementById("operateur").value    = "";
+  document.getElementById("emplacement").value  = "";
+  document.getElementById("reussite").value     = "";
   document.getElementById("commentaires").value = "";
-  document.getElementById("info-accession").style.display = "none";
-  document.getElementById("section-dyn").style.display    = "none";
+  document.getElementById("bloc-info-accession").style.display = "none";
+  document.getElementById("section-dyn").style.display         = "none";
   document.querySelectorAll(".champ-dyn").forEach(e => e.classList.remove("visible"));
   masquerAlerte("alerte-global");
   document.getElementById("codeIntro").focus();
 }
 
-function nouvelleAccession() {
-  reinitialiser();
-  afficherEcran("ecran-saisie");
-}
-
+function nouvelleAccession() { reinitialiser(); afficherEcran("ecran-saisie"); }
 function memeAccession() {
   const code = saisie.CodeIntroTexte;
   reinitialiser();
@@ -920,7 +652,6 @@ function memeAccession() {
   afficherEcran("ecran-saisie");
 }
 
-// ── Alertes ──
 function afficherAlerte(id, msg, type) {
   const el = document.getElementById(id);
   el.textContent = msg;
