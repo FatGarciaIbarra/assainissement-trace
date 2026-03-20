@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Saisie Traçabilité Vigne</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;1,300&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --vert:      #2d5a27;
+    --vert-mid:  #4a7c42;
+    --vert-pale: #e8f0e6;
+    --vert-light:#f2f7f1;
+    --terre:     #8b5e3c;
+    --terre-pale:#f5ede6;
+    --or:        #c9922a;
+    --texte:     #1a1a18;
+    --texte-2:   #5a5a54;
+    --bordure:   #cdd8cb;
+    --blanc:     #fafaf8;
+    --erreur:    #c0392b;
+    --succes:    #27ae60;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Mono', monospace;
+    background: var(--blanc);
+    color: var(--texte);
+    min-height: 100vh;
+    padding: 0;
+  }
+
+  /* ── En-tête ── */
+  header {
+    background: var(--vert);
+    color: #fff;
+    padding: 18px 28px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  header .logo {
+    font-family: 'Fraunces', serif;
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+  }
+  header .logo span {
+    font-style: italic;
+    font-weight: 300;
+    opacity: 0.8;
+  }
+  header .badge {
+    margin-left: auto;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 4px;
+    font-size: 11px;
+    padding: 3px 8px;
+    letter-spacing: 0.05em;
+  }
+
+  /* ── Conteneur principal ── */
+  .container {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 32px 24px 60px;
+  }
+
+  /* ── Blocs écran ── */
+  .ecran { display: none; animation: fadeIn 0.25s ease; }
+  .ecran.actif { display: block; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+
+  /* ── Sections du formulaire ── */
+  .section {
+    background: #fff;
+    border: 1px solid var(--bordure);
+    border-radius: 8px;
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  .section-titre {
+    background: var(--vert-light);
+    border-bottom: 1px solid var(--bordure);
+    padding: 10px 16px;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--vert);
+    font-weight: 500;
+  }
+  .section-corps { padding: 16px; }
+
+  /* ── Champs ── */
+  .champ { margin-bottom: 14px; }
+  .champ:last-child { margin-bottom: 0; }
+
+  label {
+    display: block;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--texte-2);
+    margin-bottom: 5px;
+  }
+  label .requis { color: var(--terre); margin-left: 2px; }
+
+  input[type="text"],
+  input[type="date"],
+  input[type="number"],
+  select,
+  textarea {
+    width: 100%;
+    padding: 9px 12px;
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    background: var(--blanc);
+    border: 1px solid var(--bordure);
+    border-radius: 5px;
+    color: var(--texte);
+    transition: border-color 0.15s, box-shadow 0.15s;
+    appearance: none;
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--vert-mid);
+    box-shadow: 0 0 0 3px rgba(74,124,66,0.12);
+  }
+  input[readonly] {
+    background: var(--vert-light);
+    color: var(--vert);
+    border-color: transparent;
+    cursor: default;
+  }
+  select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%235a5a54'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+  textarea { resize: vertical; min-height: 70px; }
+
+  /* ── Info accession ── */
+  .info-accession {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 10px;
+  }
+  .info-item {
+    background: var(--vert-light);
+    border: 1px solid var(--bordure);
+    border-radius: 5px;
+    padding: 8px 12px;
+  }
+  .info-item .info-label {
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--vert-mid);
+    margin-bottom: 2px;
+  }
+  .info-item .info-valeur {
+    font-size: 13px;
+    color: var(--vert);
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .info-methode {
+    grid-column: 1 / -1;
+    background: var(--terre-pale);
+    border-color: #e0c8b8;
+  }
+  .info-methode .info-label { color: var(--terre); }
+  .info-methode .info-valeur { color: var(--terre); }
+
+  /* ── Alerte / message ── */
+  .alerte {
+    padding: 10px 14px;
+    border-radius: 5px;
+    font-size: 12px;
+    margin-bottom: 14px;
+    display: none;
+  }
+  .alerte.erreur { background: #fdf0ef; border: 1px solid #f5c6c2; color: var(--erreur); display: block; }
+  .alerte.succes { background: #edfaf2; border: 1px solid #b8e8cc; color: var(--succes); display: block; }
+  .alerte.info   { background: var(--vert-light); border: 1px solid var(--bordure); color: var(--vert); display: block; }
+
+  /* ── Chargement ── */
+  .spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid var(--bordure);
+    border-top-color: var(--vert);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    vertical-align: middle;
+    margin-left: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Boutons ── */
+  .btns { display: flex; gap: 10px; margin-top: 20px; }
+  .btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 11px 22px;
+    border-radius: 5px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-weight: 500;
+  }
+  .btn-principal {
+    background: var(--vert);
+    color: #fff;
+    flex: 1;
+  }
+  .btn-principal:hover { background: var(--vert-mid); }
+  .btn-principal:disabled { background: var(--bordure); color: var(--texte-2); cursor: not-allowed; }
+  .btn-secondaire {
+    background: transparent;
+    color: var(--texte-2);
+    border: 1px solid var(--bordure);
+  }
+  .btn-secondaire:hover { border-color: var(--vert-mid); color: var(--vert); }
+  .btn-danger {
+    background: var(--erreur);
+    color: #fff;
+  }
+
+  /* ── Résumé confirmation ── */
+  .resume-liste { list-style: none; }
+  .resume-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--vert-light);
+    font-size: 13px;
+    gap: 12px;
+  }
+  .resume-item:last-child { border-bottom: none; }
+  .resume-cle {
+    color: var(--texte-2);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+  .resume-val { text-align: right; color: var(--texte); }
+
+  /* ── Champs dynamiques cachés ── */
+  .champ-dyn { display: none; }
+  .champ-dyn.visible { display: block; }
+
+  /* ── Séparateur groupe ── */
+  .groupe-label {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--or);
+    margin: 16px 0 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .groupe-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--bordure);
+  }
+
+  /* ── Succès final ── */
+  .succes-icone {
+    width: 56px; height: 56px;
+    background: var(--succes);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 16px;
+    font-size: 24px;
+    color: #fff;
+  }
+  .succes-titre {
+    font-family: 'Fraunces', serif;
+    font-size: 26px;
+    font-weight: 600;
+    text-align: center;
+    color: var(--vert);
+    margin-bottom: 6px;
+  }
+  .succes-sous {
+    text-align: center;
+    color: var(--texte-2);
+    font-size: 13px;
+    margin-bottom: 28px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Vigne<span>Trace</span></div>
+  <div class="badge">Traçabilité assainissement</div>
+</header>
+
+<div class="container">
+
+  <!-- ══════════════════════════════════════
+       ÉCRAN 1 : SAISIE
+  ══════════════════════════════════════ -->
+  <div class="ecran actif" id="ecran-saisie">
+
+    <div id="alerte-global" class="alerte"></div>
+
+    <!-- Identification accession -->
+    <div class="section">
+      <div class="section-titre">Accession</div>
+      <div class="section-corps">
+        <div class="champ">
+          <label>Code intro <span class="requis">*</span></label>
+          <input type="text" id="codeIntro" placeholder="Scanner ou saisir…" autocomplete="off" autofocus>
+        </div>
+        <div id="info-accession" style="display:none">
+          <div class="info-accession">
+            <div class="info-item">
+              <div class="info-label">Nom intro</div>
+              <div class="info-valeur" id="inf-nomIntro">—</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Code variété</div>
+              <div class="info-valeur" id="inf-codeVar">—</div>
+            </div>
+            <div class="info-item" style="grid-column:1/-1">
+              <div class="info-label">Nom variété</div>
+              <div class="info-valeur" id="inf-nomVar">—</div>
+            </div>
+            <div class="info-item info-methode">
+              <div class="info-label">Méthode active</div>
+              <div class="info-valeur" id="inf-methode">—</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Étape et méthode -->
+    <div class="section">
+      <div class="section-titre">Étape</div>
+      <div class="section-corps">
+        <div class="champ">
+          <label>Méthode <span class="requis">*</span></label>
+          <select id="methode">
+            <option value="">— Choisir —</option>
+            <option value="A">A — Thermothérapie + Régénération</option>
+            <option value="B">B — Cryothérapie</option>
+            <option value="C">C — Microgreffage</option>
+          </select>
+        </div>
+        <div class="champ">
+          <label>Étape <span class="requis">*</span></label>
+          <select id="etape">
+            <option value="">— Choisir la méthode d'abord —</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Infos communes -->
+    <div class="section">
+      <div class="section-titre">Informations</div>
+      <div class="section-corps">
+        <div class="champ">
+          <label>Date <span class="requis">*</span></label>
+          <input type="date" id="date">
+        </div>
+        <div class="champ">
+          <label>Opérateur <span class="requis">*</span></label>
+          <select id="operateur">
+            <option value="">— Chargement… —</option>
+          </select>
+        </div>
+        <div class="champ">
+          <label>Emplacement</label>
+          <input type="text" id="emplacement" placeholder="Ex : Serre B, étagère 3">
+        </div>
+        <div class="champ">
+          <label>Réussite</label>
+          <select id="reussite">
+            <option value="">—</option>
+            <option>Réussi</option>
+            <option>Échec</option>
+            <option>En cours</option>
+          </select>
+        </div>
+        <div class="champ">
+          <label>Commentaires</label>
+          <textarea id="commentaires" placeholder="Observations…"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- Champs dynamiques -->
+    <div class="section" id="section-dyn" style="display:none">
+      <div class="section-titre">Données spécifiques à l'étape</div>
+      <div class="section-corps" id="corps-dyn">
+
+        <div class="champ champ-dyn" id="dyn-milieu">
+          <label>Milieu</label>
+          <input type="text" id="milieu">
+        </div>
+        <div class="champ champ-dyn" id="dyn-nbApex">
+          <label>Nb apex</label>
+          <input type="number" id="nbApex" min="0">
+        </div>
+        <div class="champ champ-dyn" id="dyn-contamination">
+          <label>Contamination</label>
+          <select id="contamination">
+            <option value="">—</option>
+            <option>Contaminé</option>
+            <option>Non contaminé</option>
+          </select>
+        </div>
+        <div class="champ champ-dyn" id="dyn-nbMeristemes">
+          <label>Nb méristèmes</label>
+          <input type="number" id="nbMeristemes" min="0">
+        </div>
+        <div class="champ champ-dyn" id="dyn-numMeristeme">
+          <label>N° méristème</label>
+          <input type="text" id="numMeristeme" placeholder="Ex : M1, M2…">
+        </div>
+        <div class="champ champ-dyn" id="dyn-mort">
+          <label>État</label>
+          <select id="mort">
+            <option value="">—</option>
+            <option>Vivant</option>
+            <option>Mort</option>
+          </select>
+        </div>
+        <div class="champ champ-dyn" id="dyn-nbTigelles">
+          <label>Nb tigelles</label>
+          <input type="number" id="nbTigelles" min="0">
+        </div>
+        <div class="champ champ-dyn" id="dyn-codeMicrogreffe">
+          <label>Code microgreffe</label>
+          <input type="text" id="codeMicrogreffe">
+        </div>
+        <div class="champ champ-dyn" id="dyn-nbMicrogreffes">
+          <label>Nb microgreffes</label>
+          <input type="number" id="nbMicrogreffes" min="0">
+        </div>
+        <div class="champ champ-dyn" id="dyn-nbPlants">
+          <label>Nb plants</label>
+          <input type="number" id="nbPlants" min="0">
+        </div>
+        <div class="champ champ-dyn" id="dyn-nbSarments">
+          <label>Nb sarments</label>
+          <input type="number" id="nbSarments" min="0">
+        </div>
+        <div class="champ champ-dyn" id="dyn-nbGreffons">
+          <label>Nb greffons</label>
+          <input type="number" id="nbGreffons" min="0">
+        </div>
+        <div class="champ champ-dyn" id="dyn-condition">
+          <label>Condition plantation</label>
+          <input type="text" id="condition">
+        </div>
+
+        <!-- Tests sanitaires -->
+        <div class="champ champ-dyn" id="dyn-tests">
+          <div class="groupe-label">Tests sanitaires</div>
+          <div class="champ">
+            <label>Test Court-noué (CN)</label>
+            <select id="testCN">
+              <option value="">—</option>
+              <option>Positif</option>
+              <option>Négatif</option>
+              <option>Non applicable</option>
+            </select>
+          </div>
+          <div class="champ">
+            <label>Test Enroulement (Enr)</label>
+            <select id="testEnr">
+              <option value="">—</option>
+              <option>Positif</option>
+              <option>Négatif</option>
+              <option>Non applicable</option>
+            </select>
+          </div>
+          <div class="champ">
+            <label>Test Marbrure (Marb)</label>
+            <select id="testMarb">
+              <option value="">—</option>
+              <option>Positif</option>
+              <option>Négatif</option>
+              <option>Non applicable</option>
+            </select>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="btns">
+      <button class="btn btn-secondaire" onclick="reinitialiser()">Réinitialiser</button>
+      <button class="btn btn-principal" onclick="allerConfirmation()">Vérifier →</button>
+    </div>
+
+  </div><!-- fin écran-saisie -->
+
+
+  <!-- ══════════════════════════════════════
+       ÉCRAN 2 : CONFIRMATION
+  ══════════════════════════════════════ -->
+  <div class="ecran" id="ecran-confirmation">
+    <div class="section">
+      <div class="section-titre">Récapitulatif — vérifier avant d'enregistrer</div>
+      <div class="section-corps">
+        <ul class="resume-liste" id="resume-liste"></ul>
+      </div>
+    </div>
+    <div id="alerte-enreg" class="alerte"></div>
+    <div class="btns">
+      <button class="btn btn-secondaire" onclick="allerSaisie()">← Modifier</button>
+      <button class="btn btn-principal" id="btn-enregistrer" onclick="enregistrer()">Enregistrer</button>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════
+       ÉCRAN 3 : SUCCÈS
+  ══════════════════════════════════════ -->
+  <div class="ecran" id="ecran-succes">
+    <div class="succes-icone">✓</div>
+    <div class="succes-titre">Enregistré !</div>
+    <div class="succes-sous" id="succes-msg">La saisie a été ajoutée dans Suivi.</div>
+    <div id="alerte-positif" class="alerte" style="display:none"></div>
+    <div class="btns" style="justify-content:center">
+      <button class="btn btn-principal" onclick="nouvelleAccession()">Nouvelle saisie</button>
+      <button class="btn btn-secondaire" onclick="memeAccession()">Même accession</button>
+    </div>
+  </div>
+
+</div><!-- fin container -->
+
+<script>
+// ══════════════════════════════════════════════
+// CONFIGURATION — REMPLACE CES DEUX VALEURS
+// ══════════════════════════════════════════════
+const GRIST_API_KEY = "262c2a5ae02d0373c5e178ded1597de0c3b94c7e";
+const GRIST_DOC_ID  = "etTmr9MwGRsK/Teste";
+const GRIST_BASE    = "https://docs.getgrist.com/api";
+// ══════════════════════════════════════════════
+
+const HEADERS = {
+  "Authorization": "Bearer " + GRIST_API_KEY,
+  "Content-Type": "application/json"
+};
+
+// Cache des données Grist
+let cacheAccessions = {};
+let cacheOperateurs = [];
+let cacheEtapes     = [];
+
+// Données de la saisie en cours
+let saisie = {};
+
+// ── Champs dynamiques par étape ──
+const CHAMPS_ETAPE = {
+  "A_CULTURE_IV":       ["milieu","nbApex","contamination","reussite"],
+  "A_MULT_BOUTURES":    [],
+  "A_THERMOTHERAPIE":   [],
+  "A_REGEN_MERISTE":    ["milieu","nbMeristemes","reussite"],
+  "A_MULT_PLANTES":     ["numMeristeme"],
+  "B_CAISSON_CHAUD":    ["mort"],
+  "B_CRYOTHERAPIE":     ["nbMeristemes"],
+  "B_REGEN_MERISTE":    ["nbTigelles","mort","reussite"],
+  "B_MULT_PLANTES":     ["numMeristeme"],
+  "C_CAISSON_CHAUD":    ["mort"],
+  "C_MICROGREFFAGE":    ["nbMeristemes","reussite"],
+  "C_BOUTURAGE_IV":     ["codeMicrogreffe","nbMicrogreffes"],
+  "F_TRANSMISSION_INRAE":["nbPlants"],
+  "F_ACCLIMATATION":    ["nbPlants","mort","reussite"],
+  "F_TEST_SANITAIRE_PCR":["tests"],
+  "F_TEST_SANITAIRE_ELISA":["tests"],
+  "F_SERRE_CHAUDE":     ["mort"],
+  "F_SERRE_FROIDE":     ["mort"],
+  "F_RECOLTE_BOIS":     ["nbSarments"],
+  "F_RECOLTE_DOUBLON":  ["nbSarments"],
+  "F_DOUBLON_SECU":     ["mort"],
+  "F_TEC_SAINES":       [],
+  "F_TRANSMISSION_PEP": ["nbGreffons"],
+  "F_GREFFAGE":         ["reussite"],
+  "F_RECEPTION_PECH":   [],
+  "F_PLANTATION":       ["reussite"],
+  "F_SUIVI_PLANTATION": ["condition"],
+  "CHGT_METHODE":       [],
+  "RECEPTION":          [],
+  "TEC_VIROSEES":       [],
+  "DEBOURREMENT":       ["reussite"],
+};
+
+// ── Init ──
+window.addEventListener("DOMContentLoaded", async () => {
+  // Date du jour par défaut
+  document.getElementById("date").value = new Date().toISOString().split("T")[0];
+
+  await Promise.all([chargerOperateurs(), chargerEtapes(), chargerAccessions()]);
+
+  // Écoute CodeIntro
+  document.getElementById("codeIntro").addEventListener("input", debounce(rechercherAccession, 400));
+  document.getElementById("codeIntro").addEventListener("change", rechercherAccession);
+
+  // Écoute méthode → recharge étapes
+  document.getElementById("methode").addEventListener("change", filtrerEtapes);
+
+  // Écoute étape → champs dynamiques
+  document.getElementById("etape").addEventListener("change", afficherChampsDynamiques);
+});
+
+function debounce(fn, ms) {
+  let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+}
+
+// ── Chargement données Grist ──
+async function chargerOperateurs() {
+  try {
+    const r = await fetch(`${GRIST_BASE}/docs/${GRIST_DOC_ID}/tables/Operateurs/records`, { headers: HEADERS });
+    const d = await r.json();
+    cacheOperateurs = d.records.map(r => ({ id: r.id, nom: r.fields.NomOperateur }));
+    const sel = document.getElementById("operateur");
+    sel.innerHTML = '<option value="">— Choisir —</option>';
+    cacheOperateurs.sort((a,b) => a.nom.localeCompare(b.nom)).forEach(op => {
+      sel.innerHTML += `<option value="${op.id}">${op.nom}</option>`;
+    });
+  } catch(e) { afficherAlerte("alerte-global", "Impossible de charger les opérateurs. Vérifie la clé API.", "erreur"); }
+}
+
+async function chargerEtapes() {
+  try {
+    const r = await fetch(`${GRIST_BASE}/docs/${GRIST_DOC_ID}/tables/Ref_Etapes/records`, { headers: HEADERS });
+    const d = await r.json();
+    cacheEtapes = d.records.map(r => ({
+      id:      r.id,
+      code:    r.fields.CodeEtape,
+      nom:     r.fields.NomEtape,
+      methode: r.fields.Methode,
+      ordre:   r.fields.OrdreAffichage
+    })).sort((a,b) => a.ordre - b.ordre);
+  } catch(e) { console.error("Erreur chargement étapes", e); }
+}
+
+async function chargerAccessions() {
+  try {
+    const r = await fetch(`${GRIST_BASE}/docs/${GRIST_DOC_ID}/tables/Accessions/records`, { headers: HEADERS });
+    const d = await r.json();
+    d.records.forEach(rec => {
+      cacheAccessions[rec.fields.CodeIntro] = {
+        id:           rec.id,
+        nomIntro:     rec.fields.NomIntro     || "—",
+        codeVar:      rec.fields.CodeVar      || "—",
+        nomVar:       rec.fields.NomVar       || "—",
+        methodeActive:rec.fields.MethodeActive|| ""
+      };
+    });
+  } catch(e) { console.error("Erreur chargement accessions", e); }
+}
+
+// ── Recherche accession au scan ──
+function rechercherAccession() {
+  const code = document.getElementById("codeIntro").value.trim().toUpperCase();
+  const bloc = document.getElementById("info-accession");
+  if (!code) { bloc.style.display = "none"; return; }
+
+  const acc = cacheAccessions[code] || cacheAccessions[Object.keys(cacheAccessions).find(k => k.toUpperCase() === code)];
+  if (acc) {
+    document.getElementById("inf-nomIntro").textContent = acc.nomIntro;
+    document.getElementById("inf-codeVar").textContent  = acc.codeVar;
+    document.getElementById("inf-nomVar").textContent   = acc.nomVar;
+    document.getElementById("inf-methode").textContent  = acc.methodeActive || "Aucune";
+    bloc.style.display = "block";
+    // Pré-remplir la méthode
+    if (acc.methodeActive) {
+      document.getElementById("methode").value = acc.methodeActive;
+      filtrerEtapes();
+    }
+    masquerAlerte("alerte-global");
+  } else {
+    bloc.style.display = "none";
+    if (code.length > 2) afficherAlerte("alerte-global", `Code "${code}" introuvable dans Accessions.`, "erreur");
+  }
+}
+
+// ── Filtrage étapes selon méthode ──
+function filtrerEtapes() {
+  const methode = document.getElementById("methode").value;
+  const sel = document.getElementById("etape");
+  sel.innerHTML = '<option value="">— Choisir —</option>';
+  if (!methode) return;
+  const filtrees = cacheEtapes.filter(e => e.methode === methode || e.methode === "Commune");
+  filtrees.forEach(e => {
+    sel.innerHTML += `<option value="${e.code}" data-id="${e.id}">${e.nom}</option>`;
+  });
+  afficherChampsDynamiques();
+}
+
+// ── Champs dynamiques ──
+function afficherChampsDynamiques() {
+  const codeEtape = document.getElementById("etape").value;
+  const champsActifs = CHAMPS_ETAPE[codeEtape] || [];
+  const tousLesDyn = document.querySelectorAll(".champ-dyn");
+  tousLesDyn.forEach(el => el.classList.remove("visible"));
+
+  champsActifs.forEach(c => {
+    const el = document.getElementById("dyn-" + c);
+    if (el) el.classList.add("visible");
+  });
+
+  document.getElementById("section-dyn").style.display = champsActifs.length > 0 ? "block" : "none";
+}
+
+// ── Validation et confirmation ──
+function allerConfirmation() {
+  masquerAlerte("alerte-global");
+
+  const codeIntro = document.getElementById("codeIntro").value.trim();
+  const methode   = document.getElementById("methode").value;
+  const etape     = document.getElementById("etape").value;
+  const date      = document.getElementById("date").value;
+  const operateur = document.getElementById("operateur").value;
+
+  if (!codeIntro) return afficherAlerte("alerte-global", "Le code intro est obligatoire.", "erreur");
+  if (!methode)   return afficherAlerte("alerte-global", "La méthode est obligatoire.", "erreur");
+  if (!etape)     return afficherAlerte("alerte-global", "L'étape est obligatoire.", "erreur");
+  if (!date)      return afficherAlerte("alerte-global", "La date est obligatoire.", "erreur");
+  if (!operateur) return afficherAlerte("alerte-global", "L'opérateur est obligatoire.", "erreur");
+
+  // Récupérer l'ID de l'accession
+  const codeUp = codeIntro.toUpperCase();
+  const acc = cacheAccessions[codeIntro] || cacheAccessions[Object.keys(cacheAccessions).find(k => k.toUpperCase() === codeUp)];
+
+  // Récupérer l'ID de l'étape
+  const etapeOpt = document.querySelector(`#etape option[value="${etape}"]`);
+  const etapeId  = etapeOpt ? parseInt(etapeOpt.dataset.id) : null;
+
+  saisie = {
+    CodeIntro:       acc ? acc.id : null,
+    CodeIntroTexte:  codeIntro,
+    Methode:         methode,
+    Etape:           etapeId,
+    EtapeTexte:      etapeOpt ? etapeOpt.textContent : etape,
+    Date:            date,
+    Operateur:       parseInt(operateur),
+    OperateurTexte:  document.querySelector(`#operateur option[value="${operateur}"]`)?.textContent || "",
+    Emplacement:     document.getElementById("emplacement").value,
+    Reussite:        document.getElementById("reussite").value,
+    Commentaires:    document.getElementById("commentaires").value,
+    Milieu:          document.getElementById("milieu").value,
+    NbApex:          parseInt(document.getElementById("nbApex").value) || null,
+    Contamination:   document.getElementById("contamination").value,
+    NbMeristemes:    parseInt(document.getElementById("nbMeristemes").value) || null,
+    NumMeristeme:    document.getElementById("numMeristeme").value,
+    Mort:            document.getElementById("mort").value,
+    NbTigelles:      parseInt(document.getElementById("nbTigelles").value) || null,
+    CodeMicrogreffe: document.getElementById("codeMicrogreffe").value,
+    NbMicrogreffes:  parseInt(document.getElementById("nbMicrogreffes").value) || null,
+    NbPlants:        parseInt(document.getElementById("nbPlants").value) || null,
+    NbSarments:      parseInt(document.getElementById("nbSarments").value) || null,
+    NbGreffons:      parseInt(document.getElementById("nbGreffons").value) || null,
+    Condition:       document.getElementById("condition").value,
+    Test_CN:         document.getElementById("testCN").value,
+    Test_Enr:        document.getElementById("testEnr").value,
+    Test_Marb:       document.getElementById("testMarb").value,
+  };
+
+  // Construire le résumé
+  const items = [
+    ["Code intro",  saisie.CodeIntroTexte],
+    ["Méthode",     saisie.Methode],
+    ["Étape",       saisie.EtapeTexte],
+    ["Date",        saisie.Date],
+    ["Opérateur",   saisie.OperateurTexte],
+    saisie.Emplacement  ? ["Emplacement",     saisie.Emplacement]  : null,
+    saisie.Reussite     ? ["Réussite",        saisie.Reussite]     : null,
+    saisie.Commentaires ? ["Commentaires",    saisie.Commentaires] : null,
+    saisie.Milieu       ? ["Milieu",          saisie.Milieu]       : null,
+    saisie.NbApex       ? ["Nb apex",         saisie.NbApex]       : null,
+    saisie.Contamination? ["Contamination",   saisie.Contamination]: null,
+    saisie.NbMeristemes ? ["Nb méristèmes",   saisie.NbMeristemes] : null,
+    saisie.NumMeristeme ? ["N° méristème",    saisie.NumMeristeme] : null,
+    saisie.Mort         ? ["État",            saisie.Mort]         : null,
+    saisie.NbTigelles   ? ["Nb tigelles",     saisie.NbTigelles]   : null,
+    saisie.CodeMicrogreffe?["Code microgreffe",saisie.CodeMicrogreffe]:null,
+    saisie.NbMicrogreffes?["Nb microgreffes", saisie.NbMicrogreffes]:null,
+    saisie.NbPlants     ? ["Nb plants",       saisie.NbPlants]     : null,
+    saisie.NbSarments   ? ["Nb sarments",     saisie.NbSarments]   : null,
+    saisie.NbGreffons   ? ["Nb greffons",     saisie.NbGreffons]   : null,
+    saisie.Condition    ? ["Condition",       saisie.Condition]    : null,
+    saisie.Test_CN      ? ["Test CN",         saisie.Test_CN]      : null,
+    saisie.Test_Enr     ? ["Test Enr",        saisie.Test_Enr]     : null,
+    saisie.Test_Marb    ? ["Test Marb",       saisie.Test_Marb]    : null,
+  ].filter(Boolean);
+
+  const liste = document.getElementById("resume-liste");
+  liste.innerHTML = items.map(([k,v]) =>
+    `<li class="resume-item"><span class="resume-cle">${k}</span><span class="resume-val">${v}</span></li>`
+  ).join("");
+
+  afficherEcran("ecran-confirmation");
+}
+
+// ── Enregistrement dans Grist ──
+async function enregistrer() {
+  const btn = document.getElementById("btn-enregistrer");
+  btn.disabled = true;
+  btn.innerHTML = 'Enregistrement <span class="spinner"></span>';
+  masquerAlerte("alerte-enreg");
+
+  // Construire les champs à envoyer (on n'envoie pas les nulls/vides)
+  const fields = {};
+  if (saisie.CodeIntro)    fields.CodeIntro    = saisie.CodeIntro;
+  if (saisie.Methode)      fields.Methode      = saisie.Methode;
+  if (saisie.Etape)        fields.Etape        = saisie.Etape;
+  if (saisie.Date)         fields.Date         = saisie.Date;
+  if (saisie.Operateur)    fields.Operateur    = saisie.Operateur;
+  if (saisie.Emplacement)  fields.Emplacement  = saisie.Emplacement;
+  if (saisie.Reussite)     fields.Reussite     = saisie.Reussite;
+  if (saisie.Commentaires) fields.Commentaires = saisie.Commentaires;
+  if (saisie.Milieu)       fields.Milieu       = saisie.Milieu;
+  if (saisie.NbApex)       fields.NbApex       = saisie.NbApex;
+  if (saisie.Contamination)fields.Contamination= saisie.Contamination;
+  if (saisie.NbMeristemes) fields.NbMeristemes = saisie.NbMeristemes;
+  if (saisie.NumMeristeme) fields.NumMeristeme = saisie.NumMeristeme;
+  if (saisie.Mort)         fields.Mort         = saisie.Mort;
+  if (saisie.NbTigelles)   fields.NbTigelles   = saisie.NbTigelles;
+  if (saisie.CodeMicrogreffe) fields.CodeMicrogreffe = saisie.CodeMicrogreffe;
+  if (saisie.NbMicrogreffes)  fields.NbMicrogreffes  = saisie.NbMicrogreffes;
+  if (saisie.NbPlants)     fields.NbPlants     = saisie.NbPlants;
+  if (saisie.NbSarments)   fields.NbSarments   = saisie.NbSarments;
+  if (saisie.NbGreffons)   fields.NbGreffons   = saisie.NbGreffons;
+  if (saisie.Condition)    fields.Condition    = saisie.Condition;
+  if (saisie.Test_CN)      fields.Test_CN      = saisie.Test_CN;
+  if (saisie.Test_Enr)     fields.Test_Enr     = saisie.Test_Enr;
+  if (saisie.Test_Marb)    fields.Test_Marb    = saisie.Test_Marb;
+
+  try {
+    const r = await fetch(`${GRIST_BASE}/docs/${GRIST_DOC_ID}/tables/Suivi/records`, {
+      method: "POST",
+      headers: HEADERS,
+      body: JSON.stringify({ records: [{ fields }] })
+    });
+
+    if (!r.ok) {
+      const err = await r.json();
+      throw new Error(err.error || r.statusText);
+    }
+
+    // Vérifier test positif
+    const testPositif = [saisie.Test_CN, saisie.Test_Enr, saisie.Test_Marb].includes("Positif");
+    document.getElementById("succes-msg").textContent =
+      `Saisie enregistrée pour ${saisie.CodeIntroTexte} — ${saisie.EtapeTexte}.`;
+
+    const alertePositif = document.getElementById("alerte-positif");
+    if (testPositif) {
+      alertePositif.className = "alerte erreur";
+      alertePositif.textContent = "⚠ Test sanitaire POSITIF — retour en assainissement à prévoir.";
+      alertePositif.style.display = "block";
+    } else {
+      alertePositif.style.display = "none";
+    }
+
+    afficherEcran("ecran-succes");
+
+  } catch(e) {
+    afficherAlerte("alerte-enreg", "Erreur lors de l'enregistrement : " + e.message, "erreur");
+    btn.disabled = false;
+    btn.textContent = "Enregistrer";
+  }
+}
+
+// ── Navigation ──
+function afficherEcran(id) {
+  document.querySelectorAll(".ecran").forEach(e => e.classList.remove("actif"));
+  document.getElementById(id).classList.add("actif");
+  window.scrollTo(0, 0);
+}
+function allerSaisie()        { afficherEcran("ecran-saisie"); }
+function allerConfirmation2() { allerConfirmation(); }
+
+function reinitialiser() {
+  document.getElementById("codeIntro").value = "";
+  document.getElementById("methode").value   = "";
+  document.getElementById("etape").innerHTML = '<option value="">— Choisir la méthode d\'abord —</option>';
+  document.getElementById("date").value      = new Date().toISOString().split("T")[0];
+  document.getElementById("operateur").value = "";
+  document.getElementById("emplacement").value = "";
+  document.getElementById("reussite").value  = "";
+  document.getElementById("commentaires").value = "";
+  document.getElementById("info-accession").style.display = "none";
+  document.getElementById("section-dyn").style.display    = "none";
+  document.querySelectorAll(".champ-dyn").forEach(e => e.classList.remove("visible"));
+  masquerAlerte("alerte-global");
+  document.getElementById("codeIntro").focus();
+}
+
+function nouvelleAccession() {
+  reinitialiser();
+  afficherEcran("ecran-saisie");
+}
+
+function memeAccession() {
+  const code = saisie.CodeIntroTexte;
+  reinitialiser();
+  document.getElementById("codeIntro").value = code;
+  rechercherAccession();
+  afficherEcran("ecran-saisie");
+}
+
+// ── Alertes ──
+function afficherAlerte(id, msg, type) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = "alerte " + type;
+}
+function masquerAlerte(id) {
+  const el = document.getElementById(id);
+  el.className = "alerte";
+  el.textContent = "";
+}
+</script>
+</body>
+</html>
