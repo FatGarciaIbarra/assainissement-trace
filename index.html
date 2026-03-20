@@ -368,7 +368,26 @@ const CHAMPS_ETAPE = {
 };
 
 // ── Init Grist SDK ──
-grist.ready({ requiredAccess: "full" });
+grist.ready({
+  requiredAccess: "full",
+  onEditOptions: function() {}
+});
+
+async function init() {
+  await chargerDonnees();
+  document.getElementById("ecran-chargement").style.display = "none";
+  document.getElementById("date").value = new Date().toISOString().split("T")[0];
+  afficherEcran("ecran-saisie");
+
+  document.getElementById("codeIntro").addEventListener("input", debounce(rechercherAccession, 350));
+  document.getElementById("codeIntro").addEventListener("change", rechercherAccession);
+  document.getElementById("methode").addEventListener("change", filtrerEtapes);
+  document.getElementById("etape").addEventListener("change", afficherChampsDynamiques);
+  document.getElementById("codeIntro").focus();
+}
+
+grist.onOptions(function() {});
+window.addEventListener("load", init);
 
 grist.on("ready", async () => {
   await chargerDonnees();
