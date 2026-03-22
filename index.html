@@ -614,7 +614,7 @@ async function enregistrer() {
 
   try {
     await grist.docApi.applyUserActions([
-      ["AddRecord", "Suivi", null, fields]
+      ["AddRecord", "Suivi2", null, fields]
     ]);
 
     const testPositif = [saisie.Test_CN, saisie.Test_Enr, saisie.Test_Marb].includes("Positif");
