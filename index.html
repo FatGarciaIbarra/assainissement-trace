@@ -587,11 +587,11 @@ async function enregistrer() {
   masquerAlerte("alerte-enreg");
 
   const fields = {};
-  if (saisie.CodeIntro)     fields.CodeIntro     = ["R", saisie.CodeIntro];
+  if (saisie.CodeIntro)     fields.CodeIntro     = saisie.CodeIntro;
   if (saisie.Methode)       fields.Methode       = saisie.Methode;
-  if (saisie.Etape)         fields.Etape         = ["R", saisie.Etape];
+  if (saisie.Etape)         fields.Etape         = saisie.Etape;
   if (saisie.Date)          fields.Date          = saisie.Date;
-  if (saisie.Operateur)     fields.Operateur     = ["R", saisie.Operateur];
+  if (saisie.Operateur)     fields.Operateur     = saisie.Operateur;
   if (saisie.Emplacement)   fields.Emplacement   = saisie.Emplacement;
   if (saisie.Reussite)      fields.Reussite      = saisie.Reussite;
   if (saisie.Commentaires)  fields.Commentaires  = saisie.Commentaires;
