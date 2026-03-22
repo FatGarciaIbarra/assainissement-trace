@@ -590,7 +590,7 @@ async function enregistrer() {
   if (saisie.CodeIntro)     fields.CodeIntro     = saisie.CodeIntro;
   if (saisie.Methode)       fields.Methode       = saisie.Methode;
   if (saisie.Etape)         fields.Etape         = saisie.Etape;
-  if (saisie.Date)          fields.Date          = saisie.Date;
+  if (saisie.Date)          fields.Date          = Math.floor(new Date(saisie.Date).getTime() / 1000);
   if (saisie.Operateur)     fields.Operateur     = saisie.Operateur;
   if (saisie.Emplacement)   fields.Emplacement   = saisie.Emplacement;
   if (saisie.Reussite)      fields.Reussite      = saisie.Reussite;
