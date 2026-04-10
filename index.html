@@ -463,6 +463,11 @@ async function enregistrerScan(reussite) {
     mettreAJourCompteur();
     flashEcran(estEchec ? "rouge" : "vert");
     annulerScan();
+    enRegistrement = false;
+btnConfirmer.disabled = false;
+btnEchec.disabled = false;
+btnConfirmer.textContent = "Confirmer ✓";
+btnEchec.textContent = "Déclarer échec ✗";
 
   } catch(e) {
     scansSession.push({ code: accessionCourante.code, nom: accessionCourante.nomIntro, ok: false, echec: false });
