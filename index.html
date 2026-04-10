@@ -451,15 +451,17 @@ async function enregistrerScan(reussite) {
   if (nbMeristemes)fields.NbMeristemes = nbMeristemes;
 
   try {
-    await grist.docApi.applyUserActions([["AddRecord", "Suivi2", null, fields]]);
+    const result = await grist.docApi.applyUserActions([["AddRecord", "Suivi2", null, fields]]);
+const gristId = result.retValues[0];
 
     const estEchec = reussite === "Échec";
     scansSession.push({
-      code: accessionCourante.code,
-      nom:  accessionCourante.nomIntro,
-      ok:   true,
-      echec: estEchec
-    });
+  code: accessionCourante.code,
+  nom:  accessionCourante.nomIntro,
+  ok:   true,
+  echec: estEchec,
+  gristId
+});
     mettreAJourCompteur();
     flashEcran(estEchec ? "rouge" : "vert");
     annulerScan();
@@ -490,17 +492,18 @@ function mettreAJourCompteur() {
   document.getElementById("nb-scans-titre").textContent = "(" + scansSession.length + ")";
 
   const liste = document.getElementById("liste-scans");
-  liste.innerHTML = [...scansSession].reverse().map(s => {
+ liste.innerHTML = [...scansSession].map((s, i) => {
     let statut, cls;
-    if (!s.ok)    { statut = "Erreur";  cls = "err"; }
-    else if (s.echec) { statut = "Échec"; cls = "echec"; }
-    else          { statut = "OK";      cls = "ok"; }
-    return `<div class="scan-item">
+    if (!s.ok)        { statut = "Erreur"; cls = "err"; }
+    else if (s.echec) { statut = "Échec";  cls = "echec"; }
+    else              { statut = "OK";     cls = "ok"; }
+    return `<div class="scan-item" id="scan-item-${i}">
       <span class="scan-code">${s.code}</span>
       <span class="scan-nom">${s.nom}</span>
       <span class="scan-statut ${cls}">${statut}</span>
+      ${s.ok ? `<button onclick="annulerDernierScan(${i})" style="background:none;border:none;cursor:pointer;color:var(--erreur);font-size:14px;padding:0 4px;" title="Annuler ce scan">✕</button>` : ""}
     </div>`;
-  }).join("");
+  }).reverse().join("");
 
   document.getElementById("section-historique").style.display = "block";
 }
