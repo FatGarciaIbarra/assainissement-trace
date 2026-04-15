@@ -511,4 +511,124 @@ async function enregistrerScan(reussite) {
     CodeIntro:       accessionCourante.id,
     Methode:         session.methode,
     Etape:           session.etape,
-    Date:            Math.floor(ne
+    Date:            Math.floor(new Date(session.date).getTime() / 1000),
+    Operateur:       session.operateur,
+    Emplacement:     session.emplacement,
+    CodePartenaire:  session.codePartenaire   // ← nouveau champ
+  };
+  if (reussite)    fields.Reussite    = reussite;
+  if (commentaire) fields.Commentaires = commentaire;
+  if (milieu)      fields.Milieu      = milieu;
+  if (nbApex)      fields.NbApex      = nbApex;
+  if (nbMeristemes)fields.NbMeristemes = nbMeristemes;
+
+  try {
+    const result  = await grist.docApi.applyUserActions([["AddRecord", "Suivi2", null, fields]]);
+    const gristId = result.retValues[0];
+    const estEchec = reussite === "Échec";
+
+    scansSession.push({ code: accessionCourante.code, nom: accessionCourante.nomIntro, ok: true, echec: estEchec, gristId });
+    mettreAJourCompteur();
+    flashEcran(estEchec ? "rouge" : "vert");
+    annulerScan();
+  } catch(e) {
+    scansSession.push({ code: accessionCourante.code, nom: accessionCourante.nomIntro, ok: false, echec: false });
+    afficherAlerte("alerte-scan", "Erreur : " + e.message, "erreur");
+    flashEcran("rouge");
+  }
+
+  enRegistrement = false;
+  btnConfirmer.disabled = false;
+  btnEchec.disabled     = false;
+  btnConfirmer.textContent = "Confirmer ✓";
+  btnEchec.textContent     = "Déclarer échec ✗";
+}
+
+function mettreAJourCompteur() {
+  const nb      = scansSession.filter(s => s.ok).length;
+  const nbEchec = scansSession.filter(s => s.echec).length;
+  document.getElementById("badge-compteur").textContent =
+    nb + " scan" + (nb > 1 ? "s" : "") + (nbEchec > 0 ? ` (${nbEchec} échec${nbEchec > 1 ? "s" : ""})` : "");
+  document.getElementById("nb-scans-titre").textContent = "(" + scansSession.length + ")";
+
+  const liste = document.getElementById("liste-scans");
+  liste.innerHTML = [...scansSession].map((s, i) => {
+    let statut, cls;
+    if (!s.ok)       { statut = "Erreur"; cls = "err"; }
+    else if (s.echec){ statut = "Échec";  cls = "echec"; }
+    else             { statut = "OK";     cls = "ok"; }
+    return `<div class="scan-item" id="scan-item-${i}">
+      <span class="scan-code">${s.code}</span>
+      <span class="scan-nom">${s.nom}</span>
+      <span class="scan-statut ${cls}">${statut}</span>
+      ${s.ok ? `<button onclick="annulerDernierScan(${i})" style="background:none;border:none;cursor:pointer;color:var(--erreur);font-size:14px;padding:0 4px;" title="Annuler ce scan">✕</button>` : ""}
+    </div>`;
+  }).reverse().join("");
+
+  document.getElementById("section-historique").style.display = "block";
+}
+
+async function annulerDernierScan(index) {
+  const scan = scansSession[index];
+  if (!scan || !scan.gristId) return;
+  try {
+    await grist.docApi.applyUserActions([["RemoveRecord", "Suivi2", scan.gristId]]);
+    scansSession.splice(index, 1);
+    mettreAJourCompteur();
+  } catch(e) {
+    afficherAlerte("alerte-scan", "Impossible d'annuler : " + e.message, "erreur");
+  }
+}
+
+function flashEcran(couleur) {
+  const el = document.getElementById("flash");
+  el.className = "flash-overlay " + couleur + " actif";
+  setTimeout(() => el.classList.remove("actif"), 350);
+}
+
+// ─────────────────────────────────────────────────────────────
+//  FIN DE SESSION
+// ─────────────────────────────────────────────────────────────
+function terminerSession() {
+  const nb      = scansSession.filter(s => s.ok).length;
+  const nbEchec = scansSession.filter(s => s.echec).length;
+  const nbErr   = scansSession.filter(s => !s.ok).length;
+  document.getElementById("fin-resume").innerHTML =
+    `<strong>Partenaire :</strong> ${PARTENAIRE_CONFIG.nom}<br>
+     <strong>Étape :</strong> ${session.etapeNom}<br>
+     <strong>Méthode :</strong> ${session.methode}<br>
+     <strong>Date :</strong> ${session.date}<br>
+     <strong>Opérateur :</strong> ${session.operateurNom}<br>
+     <strong>Emplacement :</strong> ${session.emplacement}<br>
+     <strong>Scans enregistrés :</strong> ${nb}<br>
+     ${nbEchec > 0 ? `<strong style="color:#e65100">Échecs déclarés :</strong> ${nbEchec}<br>` : ""}
+     ${nbErr   > 0 ? `<strong style="color:var(--erreur)">Erreurs techniques :</strong> ${nbErr}` : ""}`;
+  afficherEcran("ecran-fin");
+}
+
+function nouvelleSession() {
+  session = {}; scansSession = []; accessionCourante = null; enRegistrement = false;
+  document.getElementById("scan-code").value = "";
+  document.getElementById("scan-info-bloc").style.display    = "none";
+  document.getElementById("section-historique").style.display = "none";
+  document.getElementById("cfg-date").value = new Date().toISOString().split("T")[0];
+  afficherEcran("ecran-config");
+}
+
+// ─────────────────────────────────────────────────────────────
+//  UTILITAIRES
+// ─────────────────────────────────────────────────────────────
+function afficherEcran(id) {
+  document.querySelectorAll(".ecran").forEach(e => e.classList.remove("actif"));
+  document.getElementById(id).classList.add("actif");
+  window.scrollTo(0, 0);
+}
+function afficherAlerte(id, msg, type) {
+  const el = document.getElementById(id); el.textContent = msg; el.className = "alerte " + type;
+}
+function masquerAlerte(id) {
+  const el = document.getElementById(id); el.className = "alerte"; el.textContent = "";
+}
+</script>
+</body>
+</html>
