@@ -4,113 +4,96 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Saisie Session Vigne</title>
+
+<!--
+  FORMULAIRE CORE — ne pas modifier pour adapter à un partenaire.
+  Toute personnalisation se fait dans le fichier config-xxx.js
+  chargé AVANT ce script (voir partenaire-inrae.html, partenaire-b.html…)
+-->
+
 <script src="https://grist.numerique.gouv.fr/grist-plugin-api.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;1,300&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --vert:       #2d5a27;
-    --vert-mid:   #4a7c42;
-    --vert-light: #f2f7f1;
-    --terre:      #8b5e3c;
-    --terre-pale: #f5ede6;
-    --texte:      #1a1a18;
-    --texte-2:    #5a5a54;
-    --bordure:    #cdd8cb;
-    --blanc:      #fafaf8;
-    --erreur:     #c0392b;
-    --succes:     #27ae60;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'DM Mono', monospace; background: var(--blanc); color: var(--texte); min-height: 100vh; }
-  .container { max-width: 680px; margin: 0 auto; padding: 20px 20px 60px; }
-
-  .ecran { display: none; animation: fadeIn 0.2s ease; }
-  .ecran.actif { display: block; }
-  @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
-
-  .section { background: #fff; border: 1px solid var(--bordure); border-radius: 8px; margin-bottom: 14px; overflow: hidden; }
-  .section-titre { background: var(--vert-light); border-bottom: 1px solid var(--bordure); padding: 9px 14px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--vert); font-weight: 500; display: flex; align-items: center; justify-content: space-between; }
-  .section-corps { padding: 14px; }
-
-  .champ { margin-bottom: 12px; }
-  .champ:last-child { margin-bottom: 0; }
-  label { display: block; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--texte-2); margin-bottom: 4px; }
-  label .requis { color: var(--terre); margin-left: 2px; }
-
-  input[type="text"], input[type="date"], input[type="number"], select, textarea {
-    width: 100%; padding: 9px 12px; font-family: 'DM Mono', monospace; font-size: 13px;
-    background: var(--blanc); border: 1px solid var(--bordure); border-radius: 5px;
-    color: var(--texte); transition: border-color 0.15s, box-shadow 0.15s; appearance: none;
-  }
-  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--vert-mid); box-shadow: 0 0 0 3px rgba(74,124,66,0.12); }
-  select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%235a5a54'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
-  textarea { resize: vertical; min-height: 60px; }
-
-  .alerte { padding: 10px 14px; border-radius: 5px; font-size: 12px; margin-bottom: 12px; display: none; }
-  .alerte.erreur { background: #fdf0ef; border: 1px solid #f5c6c2; color: var(--erreur); display: block; }
-  .alerte.succes { background: #edfaf2; border: 1px solid #b8e8cc; color: var(--succes); display: block; }
-  .alerte.info   { background: var(--vert-light); border: 1px solid var(--bordure); color: var(--vert); display: block; }
-
-  .btns { display: flex; gap: 10px; margin-top: 16px; }
-  .btn { font-family: 'DM Mono', monospace; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; padding: 11px 20px; border-radius: 5px; border: none; cursor: pointer; transition: all 0.15s; font-weight: 500; }
-  .btn-principal { background: var(--vert); color: #fff; flex: 1; }
-  .btn-principal:hover { background: var(--vert-mid); }
-  .btn-principal:disabled { background: var(--bordure); color: var(--texte-2); cursor: not-allowed; }
-  .btn-secondaire { background: transparent; color: var(--texte-2); border: 1px solid var(--bordure); }
-  .btn-secondaire:hover { border-color: var(--vert-mid); color: var(--vert); }
-  .btn-danger { background: var(--erreur); color: #fff; flex: 1; }
-  .btn-danger:hover { background: #a93226; }
-  .btn-danger:disabled { background: var(--bordure); color: var(--texte-2); cursor: not-allowed; }
-
-  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--bordure); border-top-color: var(--vert); border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-left: 6px; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  .session-badge { background: var(--vert); color: #fff; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; font-size: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  .session-badge strong { font-size: 13px; }
-  .session-info { opacity: 0.85; }
-  .session-compteur { margin-left: auto; background: rgba(255,255,255,0.2); border-radius: 4px; padding: 3px 10px; font-size: 13px; font-weight: 500; }
-
-  .scan-input { font-size: 18px !important; padding: 14px 16px !important; letter-spacing: 0.05em; border-width: 2px !important; }
-  .scan-input:focus { border-color: var(--vert) !important; box-shadow: 0 0 0 4px rgba(74,124,66,0.15) !important; }
-
-  .info-accession { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; margin-bottom: 12px; }
-  .info-item { background: var(--vert-light); border: 1px solid var(--bordure); border-radius: 5px; padding: 8px 12px; }
-  .info-label { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--vert-mid); margin-bottom: 2px; }
-  .info-valeur { font-size: 13px; color: var(--vert); font-weight: 500; }
-
-  .flash-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 999; pointer-events: none; opacity: 0; transition: opacity 0.1s; }
-  .flash-overlay.vert  { background: rgba(39,174,96,0.25); }
-  .flash-overlay.rouge { background: rgba(192,57,43,0.25); }
-  .flash-overlay.actif { opacity: 1; }
-
-  .liste-scans { max-height: 200px; overflow-y: auto; }
-  .scan-item { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--vert-light); font-size: 12px; }
-  .scan-item:last-child { border-bottom: none; }
-  .scan-code { font-weight: 500; color: var(--vert); min-width: 90px; }
-  .scan-nom { color: var(--texte-2); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .scan-statut { font-size: 11px; padding: 2px 7px; border-radius: 3px; white-space: nowrap; }
-  .scan-statut.ok  { background: #edfaf2; color: var(--succes); }
-  .scan-statut.err { background: #fdf0ef; color: var(--erreur); }
-  .scan-statut.echec { background: #fff3e0; color: #e65100; }
-
-  .chargement { text-align: center; padding: 40px; color: var(--texte-2); font-size: 13px; }
-  .config-resume { background: var(--vert-light); border: 1px solid var(--bordure); border-radius: 6px; padding: 12px 14px; font-size: 12px; color: var(--texte-2); line-height: 1.8; }
-  .config-resume strong { color: var(--vert); }
-  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-
-  /* Champs spécifiques accession */
-  .champs-acc { border: 1px solid var(--bordure); border-radius: 6px; padding: 12px; margin-bottom: 12px; background: var(--blanc); }
-  .champs-acc-titre { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--texte-2); margin-bottom: 10px; font-weight: 500; }
-
-  /* Boutons action scan */
-  .btns-scan { display: grid; grid-template-columns: auto 1fr 1fr; gap: 8px; margin-top: 12px; }
-  .btns-scan .btn { flex: none; }
+:root {
+  --vert: #2d5a27; --vert-mid: #4a7c42; --vert-light: #f2f7f1;
+  --terre: #8b5e3c; --terre-pale: #f5ede6; --texte: #1a1a18;
+  --texte-2: #5a5a54; --bordure: #cdd8cb; --blanc: #fafaf8;
+  --erreur: #c0392b; --succes: #27ae60;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'DM Mono', monospace; background: var(--blanc); color: var(--texte); min-height: 100vh; }
+.container { max-width: 680px; margin: 0 auto; padding: 20px 20px 60px; }
+.ecran { display: none; animation: fadeIn 0.2s ease; }
+.ecran.actif { display: block; }
+@keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+.section { background: #fff; border: 1px solid var(--bordure); border-radius: 8px; margin-bottom: 14px; overflow: hidden; }
+.section-titre { background: var(--vert-light); border-bottom: 1px solid var(--bordure); padding: 9px 14px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--vert); font-weight: 500; display: flex; align-items: center; justify-content: space-between; }
+.section-corps { padding: 14px; }
+.champ { margin-bottom: 12px; }
+.champ:last-child { margin-bottom: 0; }
+label { display: block; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--texte-2); margin-bottom: 4px; }
+label .requis { color: var(--terre); margin-left: 2px; }
+input[type="text"], input[type="date"], input[type="number"], select, textarea {
+  width: 100%; padding: 9px 12px; font-family: 'DM Mono', monospace; font-size: 13px;
+  background: var(--blanc); border: 1px solid var(--bordure); border-radius: 5px;
+  color: var(--texte); transition: border-color 0.15s, box-shadow 0.15s; appearance: none;
+}
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--vert-mid); box-shadow: 0 0 0 3px rgba(74,124,66,0.12); }
+input:disabled, select:disabled { background: var(--vert-light); color: var(--texte-2); cursor: not-allowed; }
+select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%235a5a54'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+textarea { resize: vertical; min-height: 60px; }
+.alerte { padding: 10px 14px; border-radius: 5px; font-size: 12px; margin-bottom: 12px; display: none; }
+.alerte.erreur  { background: #fdf0ef; border: 1px solid #f5c6c2; color: var(--erreur); display: block; }
+.alerte.succes  { background: #edfaf2; border: 1px solid #b8e8cc; color: var(--succes); display: block; }
+.alerte.info    { background: var(--vert-light); border: 1px solid var(--bordure); color: var(--vert); display: block; }
+.btns { display: flex; gap: 10px; margin-top: 16px; }
+.btn { font-family: 'DM Mono', monospace; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; padding: 11px 20px; border-radius: 5px; border: none; cursor: pointer; transition: all 0.15s; font-weight: 500; }
+.btn-principal { background: var(--vert); color: #fff; flex: 1; }
+.btn-principal:hover { background: var(--vert-mid); }
+.btn-principal:disabled { background: var(--bordure); color: var(--texte-2); cursor: not-allowed; }
+.btn-secondaire { background: transparent; color: var(--texte-2); border: 1px solid var(--bordure); }
+.btn-secondaire:hover { border-color: var(--vert-mid); color: var(--vert); }
+.btn-danger { background: var(--erreur); color: #fff; flex: 1; }
+.btn-danger:hover { background: #a93226; }
+.btn-danger:disabled { background: var(--bordure); color: var(--texte-2); cursor: not-allowed; }
+.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--bordure); border-top-color: var(--vert); border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-left: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.session-badge { background: var(--vert); color: #fff; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; font-size: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.session-badge strong { font-size: 13px; }
+.session-info { opacity: 0.85; }
+.session-compteur { margin-left: auto; background: rgba(255,255,255,0.2); border-radius: 4px; padding: 3px 10px; font-size: 13px; font-weight: 500; }
+.scan-input { font-size: 18px !important; padding: 14px 16px !important; letter-spacing: 0.05em; border-width: 2px !important; }
+.scan-input:focus { border-color: var(--vert) !important; box-shadow: 0 0 0 4px rgba(74,124,66,0.15) !important; }
+.info-accession { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; margin-bottom: 12px; }
+.info-item { background: var(--vert-light); border: 1px solid var(--bordure); border-radius: 5px; padding: 8px 12px; }
+.info-label { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--vert-mid); margin-bottom: 2px; }
+.info-valeur { font-size: 13px; color: var(--vert); font-weight: 500; }
+.flash-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 999; pointer-events: none; opacity: 0; transition: opacity 0.1s; }
+.flash-overlay.vert  { background: rgba(39,174,96,0.25); }
+.flash-overlay.rouge { background: rgba(192,57,43,0.25); }
+.flash-overlay.actif { opacity: 1; }
+.liste-scans { max-height: 200px; overflow-y: auto; }
+.scan-item { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--vert-light); font-size: 12px; }
+.scan-item:last-child { border-bottom: none; }
+.scan-code { font-weight: 500; color: var(--vert); min-width: 90px; }
+.scan-nom { color: var(--texte-2); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scan-statut { font-size: 11px; padding: 2px 7px; border-radius: 3px; white-space: nowrap; }
+.scan-statut.ok    { background: #edfaf2; color: var(--succes); }
+.scan-statut.err   { background: #fdf0ef; color: var(--erreur); }
+.scan-statut.echec { background: #fff3e0; color: #e65100; }
+.chargement { text-align: center; padding: 40px; color: var(--texte-2); font-size: 13px; }
+.config-resume { background: var(--vert-light); border: 1px solid var(--bordure); border-radius: 6px; padding: 12px 14px; font-size: 12px; color: var(--texte-2); line-height: 1.8; }
+.config-resume strong { color: var(--vert); }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.champs-acc { border: 1px solid var(--bordure); border-radius: 6px; padding: 12px; margin-bottom: 12px; background: var(--blanc); }
+.champs-acc-titre { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--texte-2); margin-bottom: 10px; font-weight: 500; }
+.btns-scan { display: grid; grid-template-columns: auto 1fr 1fr; gap: 8px; margin-top: 12px; }
+.btns-scan .btn { flex: none; }
+.partenaire-tag { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--vert-mid); margin-bottom: 14px; }
 </style>
 </head>
 <body>
-
 <div class="flash-overlay" id="flash"></div>
-
 <div class="container">
 
   <div id="ecran-chargement" class="chargement">
@@ -120,6 +103,8 @@
   <!-- ══ ÉCRAN 1 : CONFIG SESSION ══ -->
   <div class="ecran" id="ecran-config">
     <div id="alerte-config" class="alerte"></div>
+    <div class="partenaire-tag" id="partenaire-tag"></div>
+
     <div class="section">
       <div class="section-titre">Configuration de la session</div>
       <div class="section-corps">
@@ -155,6 +140,7 @@
         </div>
       </div>
     </div>
+
     <div class="btns">
       <button class="btn btn-principal" onclick="demarrerSession()">Démarrer la session →</button>
     </div>
@@ -162,7 +148,6 @@
 
   <!-- ══ ÉCRAN 2 : SCAN ══ -->
   <div class="ecran" id="ecran-scan">
-
     <div class="session-badge">
       <div>
         <div><strong id="badge-etape">—</strong></div>
@@ -176,15 +161,12 @@
     <div class="section">
       <div class="section-titre">Scanner une accession</div>
       <div class="section-corps">
-
         <div class="champ">
           <label>Code intro</label>
           <input type="text" id="scan-code" class="scan-input" placeholder="Scanner…" autocomplete="off">
         </div>
 
         <div id="scan-info-bloc" style="display:none">
-
-          <!-- Infos accession -->
           <div class="info-accession">
             <div class="info-item">
               <div class="info-label">Nom intro</div>
@@ -196,41 +178,41 @@
             </div>
           </div>
 
-          <!-- Champs variables -->
-          <div class="champs-acc">
+          <!-- Champs variables — visibilité pilotée par la config -->
+          <div class="champs-acc" id="champs-acc-bloc">
             <div class="champs-acc-titre">Données pour cette accession</div>
-            <div class="champ">
+
+            <div class="champ" id="champ-milieu">
               <label>Milieu</label>
               <input type="text" id="scan-milieu" placeholder="Laisser vide si non applicable">
             </div>
-            <div class="grid-2">
-              <div class="champ">
+
+            <div class="grid-2" id="champ-apex-meristemes">
+              <div class="champ" id="champ-nbApex">
                 <label>Nb apex</label>
                 <input type="number" id="scan-nbApex" min="0" placeholder="—">
               </div>
-              <div class="champ">
+              <div class="champ" id="champ-nbMeristemes">
                 <label>Nb méristèmes</label>
                 <input type="number" id="scan-nbMeristemes" min="0" placeholder="—">
               </div>
             </div>
-            <div class="champ">
+
+            <div class="champ" id="champ-commentaire">
               <label>Commentaire</label>
               <textarea id="scan-commentaire" placeholder="Observation…"></textarea>
             </div>
           </div>
 
-          <!-- Boutons action -->
           <div class="btns-scan">
             <button class="btn btn-secondaire" onclick="annulerScan()">✕</button>
-            <button class="btn btn-danger" id="btn-echec" onclick="enregistrerScan('Échec')">Déclarer échec ✗</button>
+            <button class="btn btn-danger"    id="btn-echec"    onclick="enregistrerScan('Échec')">Déclarer échec ✗</button>
             <button class="btn btn-principal" id="btn-confirmer" onclick="enregistrerScan(null)">Confirmer ✓</button>
           </div>
-
         </div>
       </div>
     </div>
 
-    <!-- Historique scans -->
     <div class="section" id="section-historique" style="display:none">
       <div class="section-titre">
         Scans de la session
@@ -262,33 +244,91 @@
 </div>
 
 <script>
-// Étapes exclues (phase finale après Transmission INRAE)
-const ETAPES_EXCLUES = [
-  "F_ACCLIMATATION","F_TEST_SANITAIRE_PCR","F_TEST_SANITAIRE_ELISA",
-  "F_SERRE_CHAUDE","F_SERRE_FROIDE","F_RECOLTE_BOIS","F_RECOLTE_DOUBLON",
-  "F_DOUBLON_SECU","F_TEC_SAINES","F_TRANSMISSION_PEP","F_GREFFAGE",
-  "F_RECEPTION_PECH","F_PLANTATION","F_SUIVI_PLANTATION"
-];
+// ─────────────────────────────────────────────────────────────
+//  VÉRIFICATION CONFIG
+//  Si aucun fichier config-xxx.js n'est chargé avant ce script,
+//  on utilise une config par défaut permissive (mode standalone).
+// ─────────────────────────────────────────────────────────────
+if (typeof PARTENAIRE_CONFIG === "undefined") {
+  console.warn("Aucun fichier config partenaire chargé — mode par défaut.");
+  window.PARTENAIRE_CONFIG = {
+    code: "DEFAUT", nom: "—",
+    methodes: [], methodeImposee: false,
+    etapesExclues: [],
+    champs: {
+      milieu: { visible: true, requis: false },
+      nbApex: { visible: true, requis: false },
+      nbMeristemes: { visible: true, requis: false },
+      commentaire: { visible: true, requis: false }
+    }
+  };
+}
 
-let cacheAccessions  = {};
-let cacheOperateurs  = [];
-let cacheEtapes      = [];
-let session          = {};
-let scansSession     = [];
+// ─────────────────────────────────────────────────────────────
+//  ÉTAT
+// ─────────────────────────────────────────────────────────────
+let cacheAccessions = {};
+let cacheOperateurs = [];
+let cacheEtapes = [];
+let session = {};
+let scansSession = [];
 let accessionCourante = null;
-let enRegistrement   = false;
+let enRegistrement = false;
 
+// ─────────────────────────────────────────────────────────────
+//  INIT
+// ─────────────────────────────────────────────────────────────
 grist.ready({ requiredAccess: "full" });
 
 async function init() {
+  appliquerConfig();
   await chargerDonnees();
   document.getElementById("ecran-chargement").style.display = "none";
   document.getElementById("cfg-date").value = new Date().toISOString().split("T")[0];
   afficherEcran("ecran-config");
   document.getElementById("cfg-methode").addEventListener("change", filtrerEtapesConfig);
 }
+
 window.addEventListener("load", init);
 
+// ─────────────────────────────────────────────────────────────
+//  APPLIQUER LA CONFIG AU DOM
+// ─────────────────────────────────────────────────────────────
+function appliquerConfig() {
+  const cfg = PARTENAIRE_CONFIG;
+
+  // Tag partenaire
+  document.getElementById("partenaire-tag").textContent = cfg.nom || cfg.code;
+  document.title = "Saisie — " + (cfg.nom || cfg.code);
+
+  // Champs variables
+  const ch = cfg.champs || {};
+  afficherChamp("champ-milieu",       ch.milieu?.visible       !== false);
+  afficherChamp("champ-nbApex",       ch.nbApex?.visible       !== false);
+  afficherChamp("champ-nbMeristemes", ch.nbMeristemes?.visible !== false);
+  afficherChamp("champ-commentaire",  ch.commentaire?.visible  !== false);
+
+  // Masquer la grille apex/méristèmes si les deux sont cachés
+  const apexVisible = ch.nbApex?.visible !== false;
+  const meristVisible = ch.nbMeristemes?.visible !== false;
+  const grid = document.getElementById("champ-apex-meristemes");
+  if (grid) grid.style.display = (apexVisible || meristVisible) ? "" : "none";
+
+  // Masquer tout le bloc si aucun champ n'est visible
+  const aucunChamp = [ch.milieu, ch.nbApex, ch.nbMeristemes, ch.commentaire]
+    .every(c => c?.visible === false);
+  const bloc = document.getElementById("champs-acc-bloc");
+  if (bloc) bloc.style.display = aucunChamp ? "none" : "";
+}
+
+function afficherChamp(id, visible) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = visible ? "" : "none";
+}
+
+// ─────────────────────────────────────────────────────────────
+//  CHARGEMENT DONNÉES GRIST
+// ─────────────────────────────────────────────────────────────
 function debounce(fn, ms) {
   let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
 }
@@ -303,24 +343,39 @@ async function chargerDonnees() {
 
     // Opérateurs
     cacheOperateurs = ops.id.map((id, i) => ({ id, nom: ops.NomOperateur[i] || "" }))
-                          .sort((a,b) => a.nom.localeCompare(b.nom));
+      .sort((a, b) => a.nom.localeCompare(b.nom));
     const selOp = document.getElementById("cfg-operateur");
     selOp.innerHTML = '<option value="">— Choisir —</option>';
     cacheOperateurs.forEach(op => selOp.innerHTML += `<option value="${op.id}">${op.nom}</option>`);
 
-    // Étapes (exclure phase finale après Transmission INRAE)
+    // Étapes — filtrer selon etapesExclues de la config
+    const exclus = PARTENAIRE_CONFIG.etapesExclues || [];
     cacheEtapes = etapes.id.map((id, i) => ({
       id, code: etapes.CodeEtape[i], nom: etapes.NomEtape[i],
       methode: etapes.Methode[i], ordre: etapes.OrdreAffichage[i]
     }))
-    .filter(e => !ETAPES_EXCLUES.includes(e.code))
-    .sort((a,b) => a.ordre - b.ordre);
+    .filter(e => !exclus.includes(e.code))
+    .sort((a, b) => a.ordre - b.ordre);
 
-    // Méthodes uniques
-    const methodes = [...new Set(cacheEtapes.filter(e => e.methode !== "Commune").map(e => e.methode))];
+    // Méthodes — filtrer selon methodes de la config
+    const methodesConfig = PARTENAIRE_CONFIG.methodes || [];
+    const toutesMethodes = [...new Set(
+      cacheEtapes.filter(e => e.methode !== "Commune").map(e => e.methode)
+    )];
+    const methodesDisponibles = methodesConfig.length > 0
+      ? toutesMethodes.filter(m => methodesConfig.includes(m))
+      : toutesMethodes;
+
     const selM = document.getElementById("cfg-methode");
     selM.innerHTML = '<option value="">— Choisir —</option>';
-    methodes.forEach(m => selM.innerHTML += `<option value="${m}">${m}</option>`);
+    methodesDisponibles.forEach(m => selM.innerHTML += `<option value="${m}">${m}</option>`);
+
+    // Si méthode imposée (une seule) : présélectionner et désactiver
+    if (PARTENAIRE_CONFIG.methodeImposee && methodesDisponibles.length === 1) {
+      selM.value = methodesDisponibles[0];
+      selM.disabled = true;
+      filtrerEtapesConfig();
+    }
 
     // Accessions
     accs.id.forEach((id, i) => {
@@ -347,6 +402,9 @@ function filtrerEtapesConfig() {
     .forEach(e => sel.innerHTML += `<option value="${e.id}">${e.nom}</option>`);
 }
 
+// ─────────────────────────────────────────────────────────────
+//  SESSION
+// ─────────────────────────────────────────────────────────────
 function demarrerSession() {
   masquerAlerte("alerte-config");
   const date       = document.getElementById("cfg-date").value;
@@ -357,35 +415,39 @@ function demarrerSession() {
   const etapeNom   = etapeEl.options[etapeEl.selectedIndex]?.text || "";
   const emplacement = document.getElementById("cfg-emplacement").value.trim();
 
-  if (!date)        return afficherAlerte("alerte-config", "La date est obligatoire.", "erreur");
-  if (!operateur)   return afficherAlerte("alerte-config", "L'opérateur est obligatoire.", "erreur");
-  if (!methode)     return afficherAlerte("alerte-config", "La méthode est obligatoire.", "erreur");
-  if (!etape)       return afficherAlerte("alerte-config", "L'étape est obligatoire.", "erreur");
-  if (!emplacement) return afficherAlerte("alerte-config", "L'emplacement est obligatoire.", "erreur");
+  if (!date)       return afficherAlerte("alerte-config", "La date est obligatoire.", "erreur");
+  if (!operateur)  return afficherAlerte("alerte-config", "L'opérateur est obligatoire.", "erreur");
+  if (!methode)    return afficherAlerte("alerte-config", "La méthode est obligatoire.", "erreur");
+  if (!etape)      return afficherAlerte("alerte-config", "L'étape est obligatoire.", "erreur");
+  if (!emplacement)return afficherAlerte("alerte-config", "L'emplacement est obligatoire.", "erreur");
 
   const opNom = document.querySelector(`#cfg-operateur option[value="${operateur}"]`)?.textContent || "";
 
   session = {
     date, operateur: parseInt(operateur), operateurNom: opNom,
-    methode, etape: parseInt(etape), etapeNom, emplacement
+    methode, etape: parseInt(etape), etapeNom, emplacement,
+    codePartenaire: PARTENAIRE_CONFIG.code
   };
   scansSession = [];
 
-  document.getElementById("badge-etape").textContent    = etapeNom;
-  document.getElementById("badge-info").textContent     = `${methode} · ${opNom} · ${emplacement}`;
+  document.getElementById("badge-etape").textContent = etapeNom;
+  document.getElementById("badge-info").textContent =
+    `${PARTENAIRE_CONFIG.nom} · ${methode} · ${opNom} · ${emplacement}`;
   document.getElementById("badge-compteur").textContent = "0 scan";
 
   afficherEcran("ecran-scan");
 
   const scanInput = document.getElementById("scan-code");
-  scanInput.replaceWith(scanInput.cloneNode(true)); // reset listeners
+  scanInput.replaceWith(scanInput.cloneNode(true));
   const newInput = document.getElementById("scan-code");
   newInput.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); rechercherAccession(); } });
   newInput.addEventListener("input", debounce(e => { if (e.target.value.trim().length > 2) rechercherAccession(); }, 350));
-
   setTimeout(() => newInput.focus(), 100);
 }
 
+// ─────────────────────────────────────────────────────────────
+//  SCAN
+// ─────────────────────────────────────────────────────────────
 function rechercherAccession() {
   const code = document.getElementById("scan-code").value.trim().toUpperCase();
   masquerAlerte("alerte-scan");
@@ -397,8 +459,8 @@ function rechercherAccession() {
     document.getElementById("scan-nomIntro").textContent = acc.nomIntro;
     document.getElementById("scan-nomVar").textContent   = acc.nomVar;
     document.getElementById("scan-info-bloc").style.display = "block";
-    document.getElementById("scan-milieu").value       = "";
-    document.getElementById("scan-nbApex").value       = "";
+    document.getElementById("scan-milieu").value      = "";
+    document.getElementById("scan-nbApex").value      = "";
     document.getElementById("scan-nbMeristemes").value = "";
     document.getElementById("scan-commentaire").value  = "";
     setTimeout(() => document.getElementById("btn-confirmer").focus(), 50);
@@ -422,14 +484,23 @@ function annulerScan() {
 
 async function enregistrerScan(reussite) {
   if (!accessionCourante || enRegistrement) return;
-  enRegistrement = true;
 
+  // Validation champs requis selon config
+  const cfg = PARTENAIRE_CONFIG.champs || {};
+  if (cfg.milieu?.requis && !document.getElementById("scan-milieu").value.trim())
+    return afficherAlerte("alerte-scan", "Le champ Milieu est obligatoire.", "erreur");
+  if (cfg.nbApex?.requis && !document.getElementById("scan-nbApex").value)
+    return afficherAlerte("alerte-scan", "Le champ Nb apex est obligatoire.", "erreur");
+  if (cfg.nbMeristemes?.requis && !document.getElementById("scan-nbMeristemes").value)
+    return afficherAlerte("alerte-scan", "Le champ Nb méristèmes est obligatoire.", "erreur");
+
+  enRegistrement = true;
   const btnConfirmer = document.getElementById("btn-confirmer");
   const btnEchec     = document.getElementById("btn-echec");
   btnConfirmer.disabled = true;
   btnEchec.disabled     = true;
-  btnConfirmer.innerHTML = reussite ? btnConfirmer.innerHTML : 'Enregistrement <span class="spinner"></span>';
-  if (reussite) btnEchec.innerHTML = 'Enregistrement <span class="spinner"></span>';
+  if (reussite) btnEchec.innerHTML    = 'Enregistrement <span class="spinner"></span>';
+  else          btnConfirmer.innerHTML = 'Enregistrement <span class="spinner"></span>';
 
   const milieu       = document.getElementById("scan-milieu").value;
   const nbApex       = parseInt(document.getElementById("scan-nbApex").value) || null;
@@ -437,119 +508,7 @@ async function enregistrerScan(reussite) {
   const commentaire  = document.getElementById("scan-commentaire").value;
 
   const fields = {
-    CodeIntro:  accessionCourante.id,
-    Methode:    session.methode,
-    Etape:      session.etape,
-    Date:       Math.floor(new Date(session.date).getTime() / 1000),
-    Operateur:  session.operateur,
-    Emplacement: session.emplacement,
-  };
-  if (reussite)    fields.Reussite     = reussite;
-  if (commentaire) fields.Commentaires = commentaire;
-  if (milieu)      fields.Milieu       = milieu;
-  if (nbApex)      fields.NbApex       = nbApex;
-  if (nbMeristemes)fields.NbMeristemes = nbMeristemes;
-
-  try {
-    const result = await grist.docApi.applyUserActions([["AddRecord", "Suivi2", null, fields]]);
-const gristId = result.retValues[0];
-
-    const estEchec = reussite === "Échec";
-    scansSession.push({
-  code: accessionCourante.code,
-  nom:  accessionCourante.nomIntro,
-  ok:   true,
-  echec: estEchec,
-  gristId
-});
-    mettreAJourCompteur();
-    flashEcran(estEchec ? "rouge" : "vert");
-    annulerScan();
-    enRegistrement = false;
-btnConfirmer.disabled = false;
-btnEchec.disabled = false;
-btnConfirmer.textContent = "Confirmer ✓";
-btnEchec.textContent = "Déclarer échec ✗";
-
-  } catch(e) {
-    scansSession.push({ code: accessionCourante.code, nom: accessionCourante.nomIntro, ok: false, echec: false });
-    afficherAlerte("alerte-scan", "Erreur : " + e.message, "erreur");
-    flashEcran("rouge");
-    btnConfirmer.disabled = false;
-    btnEchec.disabled     = false;
-    btnConfirmer.textContent = "Confirmer ✓";
-    btnEchec.textContent     = "Déclarer échec ✗";
-  }
-
-  enRegistrement = false;
-}
-
-function mettreAJourCompteur() {
-  const nb      = scansSession.filter(s => s.ok).length;
-  const nbEchec = scansSession.filter(s => s.echec).length;
-  document.getElementById("badge-compteur").textContent =
-    nb + " scan" + (nb > 1 ? "s" : "") + (nbEchec > 0 ? ` (${nbEchec} échec${nbEchec > 1 ? "s" : ""})` : "");
-  document.getElementById("nb-scans-titre").textContent = "(" + scansSession.length + ")";
-
-  const liste = document.getElementById("liste-scans");
- liste.innerHTML = [...scansSession].map((s, i) => {
-    let statut, cls;
-    if (!s.ok)        { statut = "Erreur"; cls = "err"; }
-    else if (s.echec) { statut = "Échec";  cls = "echec"; }
-    else              { statut = "OK";     cls = "ok"; }
-    return `<div class="scan-item" id="scan-item-${i}">
-      <span class="scan-code">${s.code}</span>
-      <span class="scan-nom">${s.nom}</span>
-      <span class="scan-statut ${cls}">${statut}</span>
-      ${s.ok ? `<button onclick="annulerDernierScan(${i})" style="background:none;border:none;cursor:pointer;color:var(--erreur);font-size:14px;padding:0 4px;" title="Annuler ce scan">✕</button>` : ""}
-    </div>`;
-  }).reverse().join("");
-
-  document.getElementById("section-historique").style.display = "block";
-}
-
-function flashEcran(couleur) {
-  const el = document.getElementById("flash");
-  el.className = "flash-overlay " + couleur + " actif";
-  setTimeout(() => el.classList.remove("actif"), 350);
-}
-
-function terminerSession() {
-  const nb      = scansSession.filter(s => s.ok).length;
-  const nbEchec = scansSession.filter(s => s.echec).length;
-  const nbErr   = scansSession.filter(s => !s.ok).length;
-  document.getElementById("fin-resume").innerHTML =
-    `<strong>Étape :</strong> ${session.etapeNom}<br>
-     <strong>Méthode :</strong> ${session.methode}<br>
-     <strong>Date :</strong> ${session.date}<br>
-     <strong>Opérateur :</strong> ${session.operateurNom}<br>
-     <strong>Emplacement :</strong> ${session.emplacement}<br>
-     <strong>Scans enregistrés :</strong> ${nb}<br>
-     ${nbEchec > 0 ? `<strong style="color:#e65100">Échecs déclarés :</strong> ${nbEchec}<br>` : ""}
-     ${nbErr   > 0 ? `<strong style="color:var(--erreur)">Erreurs techniques :</strong> ${nbErr}` : ""}`;
-  afficherEcran("ecran-fin");
-}
-
-function nouvelleSession() {
-  session = {}; scansSession = []; accessionCourante = null; enRegistrement = false;
-  document.getElementById("scan-code").value = "";
-  document.getElementById("scan-info-bloc").style.display    = "none";
-  document.getElementById("section-historique").style.display = "none";
-  document.getElementById("cfg-date").value = new Date().toISOString().split("T")[0];
-  afficherEcran("ecran-config");
-}
-
-function afficherEcran(id) {
-  document.querySelectorAll(".ecran").forEach(e => e.classList.remove("actif"));
-  document.getElementById(id).classList.add("actif");
-  window.scrollTo(0, 0);
-}
-function afficherAlerte(id, msg, type) {
-  const el = document.getElementById(id); el.textContent = msg; el.className = "alerte " + type;
-}
-function masquerAlerte(id) {
-  const el = document.getElementById(id); el.className = "alerte"; el.textContent = "";
-}
-</script>
-</body>
-</html>
+    CodeIntro:       accessionCourante.id,
+    Methode:         session.methode,
+    Etape:           session.etape,
+    Date:            Math.floor(ne
