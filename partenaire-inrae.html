@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Saisie INRAE</title>
+<!--
+  PAGE PARTENAIRE — INRAE
+  ════════════════════════════════════════════════
+  Pour créer un nouveau partenaire :
+  1. Copier ce fichier → partenaire-b.html
+  2. Modifier uniquement le bloc PARTENAIRE_CONFIG ci-dessous
+  3. Ne toucher à rien d'autre
+
+  URL à donner au partenaire :
+  https://fatgarciaibarra.github.io/assainissement-trace/partenaire-inrae.html
+  ════════════════════════════════════════════════
+-->
+<script>
+// ── SEULE PARTIE À MODIFIER POUR UN NOUVEAU PARTENAIRE ──
+const PARTENAIRE_CONFIG = {
+  code: "INRAE",
+  nom: "INRAE",
+  methodes: [
+    "Thermotherapie+Regeneration",
+    "Cryotherapie",
+    "Microgreffage"
+  ],
+  methodeImposee: false,
+  etapesExclues: [
+    "F_ACCLIMATATION","F_TEST_SANITAIRE_PCR","F_TEST_SANITAIRE_ELISA",
+    "F_SERRE_CHAUDE","F_SERRE_FROIDE","F_RECOLTE_BOIS","F_RECOLTE_DOUBLON",
+    "F_DOUBLON_SECU","F_TEC_SAINES","F_TRANSMISSION_PEP","F_GREFFAGE",
+    "F_RECEPTION_PECH","F_PLANTATION","F_SUIVI_PLANTATION"
+  ],
+  champs: {
+    milieu:       { visible: true, requis: false },
+    nbApex:       { visible: true, requis: false },
+    nbMeristemes: { visible: true, requis: false },
+    commentaire:  { visible: true, requis: false }
+  }
+};
+// ── FIN CONFIG ──
+</script>
+<script>
+// Charge le formulaire core (index.html) dans cette page
+// PARTENAIRE_CONFIG est déjà défini ci-dessus quand init() s'exécute
+document.addEventListener("DOMContentLoaded", () => {
+  fetch("index.html")
+    .then(r => r.text())
+    .then(html => {
+      const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+      if (!bodyMatch) return;
+      document.body.innerHTML = bodyMatch[1];
+      // Réexécuter les scripts inline du core
+      document.querySelectorAll("body script:not([src])").forEach(old => {
+        const s = document.createElement("script");
+        s.textContent = old.textContent;
+        old.replaceWith(s);
+      });
+    })
+    .catch(() => {
+      document.body.innerHTML = '<div style="padding:40px;font-family:monospace;color:#c0392b">Erreur : impossible de charger index.html</div>';
+    });
+});
+</script>
+</head>
+<body>
+<div style="text-align:center;padding:40px;font-family:monospace;color:#5a5a54">
+  Chargement…
+</div>
+</body>
+</html>
