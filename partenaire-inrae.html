@@ -5,27 +5,176 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Saisie INRAE</title>
 <!--
-  PAGE PARTENAIRE — INRAE
   ════════════════════════════════════════════════
+  FORMULAIRE PARTENAIRE — INRAE
+  Fichier autonome : config + formulaire en un seul fichier.
   Pour créer un nouveau partenaire :
-  1. Copier ce fichier → partenaire-b.html
-  2. Modifier uniquement le bloc PARTENAIRE_CONFIG ci-dessous
+  1. Copier ce fichier entier → partenaire-nom.html
+  2. Modifier UNIQUEMENT le bloc PARTENAIRE_CONFIG
   3. Ne toucher à rien d'autre
-
-  URL à donner au partenaire :
-  https://fatgarciaibarra.github.io/assainissement-trace/partenaire-inrae.html
   ════════════════════════════════════════════════
 -->
+<script src="https://grist.numerique.gouv.fr/grist-plugin-api.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --vert: #2d5a27; --vert-mid: #4a7c42; --vert-light: #f2f7f1;
+  --terre: #8b5e3c; --texte: #1a1a18; --texte-2: #5a5a54;
+  --bordure: #cdd8cb; --blanc: #fafaf8; --erreur: #c0392b; --succes: #27ae60;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'DM Mono', monospace; background: var(--blanc); color: var(--texte); min-height: 100vh; }
+.container { max-width: 680px; margin: 0 auto; padding: 20px 20px 60px; }
+.ecran { display: none; animation: fadeIn 0.2s ease; }
+.ecran.actif { display: block; }
+@keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+.section { background: #fff; border: 1px solid var(--bordure); border-radius: 8px; margin-bottom: 14px; overflow: hidden; }
+.section-titre { background: var(--vert-light); border-bottom: 1px solid var(--bordure); padding: 9px 14px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--vert); font-weight: 500; display: flex; align-items: center; justify-content: space-between; }
+.section-corps { padding: 14px; }
+.champ { margin-bottom: 12px; }
+.champ:last-child { margin-bottom: 0; }
+label { display: block; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--texte-2); margin-bottom: 4px; }
+label .requis { color: var(--terre); margin-left: 2px; }
+input[type="text"], input[type="date"], input[type="number"], select, textarea {
+  width: 100%; padding: 9px 12px; font-family: 'DM Mono', monospace; font-size: 13px;
+  background: var(--blanc); border: 1px solid var(--bordure); border-radius: 5px;
+  color: var(--texte); transition: border-color 0.15s, box-shadow 0.15s; appearance: none;
+}
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--vert-mid); box-shadow: 0 0 0 3px rgba(74,124,66,0.12); }
+input:disabled, select:disabled { background: var(--vert-light); color: var(--texte-2); cursor: not-allowed; }
+select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%235a5a54'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+textarea { resize: vertical; min-height: 60px; }
+.alerte { padding: 10px 14px; border-radius: 5px; font-size: 12px; margin-bottom: 12px; display: none; }
+.alerte.erreur { background: #fdf0ef; border: 1px solid #f5c6c2; color: var(--erreur); display: block; }
+.alerte.succes { background: #edfaf2; border: 1px solid #b8e8cc; color: var(--succes); display: block; }
+.alerte.info   { background: var(--vert-light); border: 1px solid var(--bordure); color: var(--vert); display: block; }
+.btns { display: flex; gap: 10px; margin-top: 16px; }
+.btn { font-family: 'DM Mono', monospace; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; padding: 11px 20px; border-radius: 5px; border: none; cursor: pointer; transition: all 0.15s; font-weight: 500; }
+.btn-principal { background: var(--vert); color: #fff; flex: 1; }
+.btn-principal:hover { background: var(--vert-mid); }
+.btn-principal:disabled { background: var(--bordure); color: var(--texte-2); cursor: not-allowed; }
+.btn-secondaire { background: transparent; color: var(--texte-2); border: 1px solid var(--bordure); }
+.btn-secondaire:hover { border-color: var(--vert-mid); color: var(--vert); }
+.btn-danger { background: var(--erreur); color: #fff; flex: 1; }
+.btn-danger:hover { background: #a93226; }
+.btn-danger:disabled { background: var(--bordure); color: var(--texte-2); cursor: not-allowed; }
+.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--bordure); border-top-color: var(--vert); border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-left: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.session-badge { background: var(--vert); color: #fff; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; font-size: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.session-badge strong { font-size: 13px; }
+.session-info { opacity: 0.85; }
+.session-compteur { margin-left: auto; background: rgba(255,255,255,0.2); border-radius: 4px; padding: 3px 10px; font-size: 13px; font-weight: 500; }
+.scan-input { font-size: 18px !important; padding: 14px 16px !important; letter-spacing: 0.05em; border-width: 2px !important; }
+.scan-input:focus { border-color: var(--vert) !important; box-shadow: 0 0 0 4px rgba(74,124,66,0.15) !important; }
+.info-accession { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; margin-bottom: 12px; }
+.info-item { background: var(--vert-light); border: 1px solid var(--bordure); border-radius: 5px; padding: 8px 12px; }
+.info-label { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--vert-mid); margin-bottom: 2px; }
+.info-valeur { font-size: 13px; color: var(--vert); font-weight: 500; }
+.flash-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 999; pointer-events: none; opacity: 0; transition: opacity 0.1s; }
+.flash-overlay.vert  { background: rgba(39,174,96,0.25); }
+.flash-overlay.rouge { background: rgba(192,57,43,0.25); }
+.flash-overlay.actif { opacity: 1; }
+.liste-scans { max-height: 200px; overflow-y: auto; }
+.scan-item { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--vert-light); font-size: 12px; }
+.scan-item:last-child { border-bottom: none; }
+.scan-code { font-weight: 500; color: var(--vert); min-width: 90px; }
+.scan-nom { color: var(--texte-2); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scan-statut { font-size: 11px; padding: 2px 7px; border-radius: 3px; white-space: nowrap; }
+.scan-statut.ok    { background: #edfaf2; color: var(--succes); }
+.scan-statut.err   { background: #fdf0ef; color: var(--erreur); }
+.scan-statut.echec { background: #fff3e0; color: #e65100; }
+.chargement { text-align: center; padding: 40px; color: var(--texte-2); font-size: 13px; }
+.config-resume { background: var(--vert-light); border: 1px solid var(--bordure); border-radius: 6px; padding: 12px 14px; font-size: 12px; color: var(--texte-2); line-height: 1.8; }
+.config-resume strong { color: var(--vert); }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.champs-acc { border: 1px solid var(--bordure); border-radius: 6px; padding: 12px; margin-bottom: 12px; background: var(--blanc); }
+.champs-acc-titre { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--texte-2); margin-bottom: 10px; font-weight: 500; }
+.btns-scan { display: grid; grid-template-columns: auto 1fr 1fr; gap: 8px; margin-top: 12px; }
+.btns-scan .btn { flex: none; }
+.partenaire-tag { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--vert-mid); margin-bottom: 14px; }
+</style>
+</head>
+<body>
+<div class="flash-overlay" id="flash"></div>
+<div class="container">
+  <div id="ecran-chargement" class="chargement">Connexion à Grist <span class="spinner"></span></div>
+
+  <div class="ecran" id="ecran-config">
+    <div id="alerte-config" class="alerte"></div>
+    <div class="partenaire-tag" id="partenaire-tag"></div>
+    <div class="section">
+      <div class="section-titre">Configuration de la session</div>
+      <div class="section-corps">
+        <div class="grid-2">
+          <div class="champ"><label>Date <span class="requis">*</span></label><input type="date" id="cfg-date"></div>
+          <div class="champ"><label>Opérateur <span class="requis">*</span></label><select id="cfg-operateur"><option value="">— Choisir —</option></select></div>
+        </div>
+        <div class="grid-2">
+          <div class="champ"><label>Méthode <span class="requis">*</span></label><select id="cfg-methode"><option value="">— Choisir —</option></select></div>
+          <div class="champ"><label>Étape <span class="requis">*</span></label><select id="cfg-etape"><option value="">— Méthode d'abord —</option></select></div>
+        </div>
+        <div class="champ"><label>Emplacement <span class="requis">*</span></label><input type="text" id="cfg-emplacement" placeholder="Ex : Serre B, étagère 3"></div>
+      </div>
+    </div>
+    <div class="btns"><button class="btn btn-principal" onclick="demarrerSession()">Démarrer la session →</button></div>
+  </div>
+
+  <div class="ecran" id="ecran-scan">
+    <div class="session-badge">
+      <div><div><strong id="badge-etape">—</strong></div><div class="session-info" id="badge-info">—</div></div>
+      <div class="session-compteur" id="badge-compteur">0 scan</div>
+    </div>
+    <div id="alerte-scan" class="alerte"></div>
+    <div class="section">
+      <div class="section-titre">Scanner une accession</div>
+      <div class="section-corps">
+        <div class="champ"><label>Code intro</label><input type="text" id="scan-code" class="scan-input" placeholder="Scanner…" autocomplete="off"></div>
+        <div id="scan-info-bloc" style="display:none">
+          <div class="info-accession">
+            <div class="info-item"><div class="info-label">Nom intro</div><div class="info-valeur" id="scan-nomIntro">—</div></div>
+            <div class="info-item"><div class="info-label">Nom variété</div><div class="info-valeur" id="scan-nomVar">—</div></div>
+          </div>
+          <div class="champs-acc" id="champs-acc-bloc">
+            <div class="champs-acc-titre">Données pour cette accession</div>
+            <div class="champ" id="champ-milieu"><label>Milieu</label><input type="text" id="scan-milieu" placeholder="Laisser vide si non applicable"></div>
+            <div class="grid-2" id="champ-apex-meristemes">
+              <div class="champ" id="champ-nbApex"><label>Nb apex</label><input type="number" id="scan-nbApex" min="0" placeholder="—"></div>
+              <div class="champ" id="champ-nbMeristemes"><label>Nb méristèmes</label><input type="number" id="scan-nbMeristemes" min="0" placeholder="—"></div>
+            </div>
+            <div class="champ" id="champ-commentaire"><label>Commentaire</label><textarea id="scan-commentaire" placeholder="Observation…"></textarea></div>
+          </div>
+          <div class="btns-scan">
+            <button class="btn btn-secondaire" onclick="annulerScan()">✕</button>
+            <button class="btn btn-danger" id="btn-echec" onclick="enregistrerScan('Échec')">Déclarer échec ✗</button>
+            <button class="btn btn-principal" id="btn-confirmer" onclick="enregistrerScan(null)">Confirmer ✓</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="section" id="section-historique" style="display:none">
+      <div class="section-titre">Scans de la session <span id="nb-scans-titre" style="font-weight:400;opacity:0.7"></span></div>
+      <div class="section-corps"><div class="liste-scans" id="liste-scans"></div></div>
+    </div>
+    <div class="btns"><button class="btn btn-secondaire" onclick="terminerSession()">Terminer la session</button></div>
+  </div>
+
+  <div class="ecran" id="ecran-fin">
+    <div class="section">
+      <div class="section-titre">Session terminée</div>
+      <div class="section-corps"><div class="config-resume" id="fin-resume"></div></div>
+    </div>
+    <div class="btns"><button class="btn btn-principal" onclick="nouvelleSession()">Nouvelle session</button></div>
+  </div>
+</div>
+
 <script>
-// ── SEULE PARTIE À MODIFIER POUR UN NOUVEAU PARTENAIRE ──
+// ════════════════════════════════════════════════
+//  ▼▼▼ SEULE PARTIE À MODIFIER PAR PARTENAIRE ▼▼▼
+// ════════════════════════════════════════════════
 const PARTENAIRE_CONFIG = {
   code: "INRAE",
   nom: "INRAE",
-  methodes: [
-    "Thermotherapie+Regeneration",
-    "Cryotherapie",
-    "Microgreffage"
-  ],
+  methodes: ["Thermotherapie+Regeneration", "Cryotherapie", "Microgreffage"],
   methodeImposee: false,
   etapesExclues: [
     "F_ACCLIMATATION","F_TEST_SANITAIRE_PCR","F_TEST_SANITAIRE_ELISA",
@@ -40,34 +189,213 @@ const PARTENAIRE_CONFIG = {
     commentaire:  { visible: true, requis: false }
   }
 };
-// ── FIN CONFIG ──
+// ════════════════════════════════════════════════
+//  ▲▲▲ FIN DE LA PARTIE À MODIFIER ▲▲▲
+// ════════════════════════════════════════════════
+
+let cacheAccessions = {}, cacheOperateurs = [], cacheEtapes = [];
+let session = {}, scansSession = [], accessionCourante = null, enRegistrement = false;
+
+grist.ready({ requiredAccess: "full" });
+
+async function init() {
+  appliquerConfig();
+  await chargerDonnees();
+  document.getElementById("ecran-chargement").style.display = "none";
+  document.getElementById("cfg-date").value = new Date().toISOString().split("T")[0];
+  afficherEcran("ecran-config");
+  document.getElementById("cfg-methode").addEventListener("change", filtrerEtapesConfig);
+}
+window.addEventListener("load", init);
+
+function appliquerConfig() {
+  document.getElementById("partenaire-tag").textContent = PARTENAIRE_CONFIG.nom;
+  document.title = "Saisie — " + PARTENAIRE_CONFIG.nom;
+  const ch = PARTENAIRE_CONFIG.champs || {};
+  afficherChamp("champ-milieu",       ch.milieu?.visible       !== false);
+  afficherChamp("champ-nbApex",       ch.nbApex?.visible       !== false);
+  afficherChamp("champ-nbMeristemes", ch.nbMeristemes?.visible !== false);
+  afficherChamp("champ-commentaire",  ch.commentaire?.visible  !== false);
+  const grid = document.getElementById("champ-apex-meristemes");
+  if (grid) grid.style.display = (ch.nbApex?.visible !== false || ch.nbMeristemes?.visible !== false) ? "" : "none";
+  const aucun = [ch.milieu, ch.nbApex, ch.nbMeristemes, ch.commentaire].every(c => c?.visible === false);
+  const bloc = document.getElementById("champs-acc-bloc");
+  if (bloc) bloc.style.display = aucun ? "none" : "";
+}
+
+function afficherChamp(id, visible) { const el = document.getElementById(id); if (el) el.style.display = visible ? "" : "none"; }
+function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+
+async function chargerDonnees() {
+  try {
+    const [ops, etapes, accs] = await Promise.all([
+      grist.docApi.fetchTable("Operateurs"),
+      grist.docApi.fetchTable("Ref_Etapes"),
+      grist.docApi.fetchTable("Accessions")
+    ]);
+    cacheOperateurs = ops.id.map((id, i) => ({ id, nom: ops.NomOperateur[i] || "" })).sort((a,b) => a.nom.localeCompare(b.nom));
+    const selOp = document.getElementById("cfg-operateur");
+    selOp.innerHTML = '<option value="">— Choisir —</option>';
+    cacheOperateurs.forEach(op => selOp.innerHTML += `<option value="${op.id}">${op.nom}</option>`);
+
+    const exclus = PARTENAIRE_CONFIG.etapesExclues || [];
+    cacheEtapes = etapes.id.map((id, i) => ({ id, code: etapes.CodeEtape[i], nom: etapes.NomEtape[i], methode: etapes.Methode[i], ordre: etapes.OrdreAffichage[i] }))
+      .filter(e => !exclus.includes(e.code)).sort((a,b) => a.ordre - b.ordre);
+
+    const mc = PARTENAIRE_CONFIG.methodes || [];
+    const toutes = [...new Set(cacheEtapes.filter(e => e.methode !== "Commune").map(e => e.methode))];
+    const dispo = mc.length > 0 ? toutes.filter(m => mc.includes(m)) : toutes;
+    const selM = document.getElementById("cfg-methode");
+    selM.innerHTML = '<option value="">— Choisir —</option>';
+    dispo.forEach(m => selM.innerHTML += `<option value="${m}">${m}</option>`);
+    if (PARTENAIRE_CONFIG.methodeImposee && dispo.length === 1) { selM.value = dispo[0]; selM.disabled = true; filtrerEtapesConfig(); }
+
+    accs.id.forEach((id, i) => { const c = accs.CodeIntro[i]; if (c) cacheAccessions[c.toUpperCase()] = { id, nomIntro: accs.NomIntro[i] || "—", nomVar: accs.NomVar[i] || "—" }; });
+  } catch(e) { afficherAlerte("alerte-config", "Erreur de chargement : " + e.message, "erreur"); }
+}
+
+function filtrerEtapesConfig() {
+  const m = document.getElementById("cfg-methode").value;
+  const sel = document.getElementById("cfg-etape");
+  sel.innerHTML = '<option value="">— Choisir —</option>';
+  if (!m) return;
+  cacheEtapes.filter(e => e.methode === m || e.methode === "Commune").forEach(e => sel.innerHTML += `<option value="${e.id}">${e.nom}</option>`);
+}
+
+function demarrerSession() {
+  masquerAlerte("alerte-config");
+  const date = document.getElementById("cfg-date").value;
+  const operateur = document.getElementById("cfg-operateur").value;
+  const methode = document.getElementById("cfg-methode").value;
+  const etapeEl = document.getElementById("cfg-etape");
+  const etape = etapeEl.value;
+  const etapeNom = etapeEl.options[etapeEl.selectedIndex]?.text || "";
+  const emplacement = document.getElementById("cfg-emplacement").value.trim();
+  if (!date)        return afficherAlerte("alerte-config", "La date est obligatoire.", "erreur");
+  if (!operateur)   return afficherAlerte("alerte-config", "L'opérateur est obligatoire.", "erreur");
+  if (!methode)     return afficherAlerte("alerte-config", "La méthode est obligatoire.", "erreur");
+  if (!etape)       return afficherAlerte("alerte-config", "L'étape est obligatoire.", "erreur");
+  if (!emplacement) return afficherAlerte("alerte-config", "L'emplacement est obligatoire.", "erreur");
+  const opNom = document.querySelector(`#cfg-operateur option[value="${operateur}"]`)?.textContent || "";
+  session = { date, operateur: parseInt(operateur), operateurNom: opNom, methode, etape: parseInt(etape), etapeNom, emplacement, codePartenaire: PARTENAIRE_CONFIG.code };
+  scansSession = [];
+  document.getElementById("badge-etape").textContent = etapeNom;
+  document.getElementById("badge-info").textContent = `${PARTENAIRE_CONFIG.nom} · ${methode} · ${opNom} · ${emplacement}`;
+  document.getElementById("badge-compteur").textContent = "0 scan";
+  afficherEcran("ecran-scan");
+  const si = document.getElementById("scan-code"); si.replaceWith(si.cloneNode(true));
+  const ni = document.getElementById("scan-code");
+  ni.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); rechercherAccession(); } });
+  ni.addEventListener("input", debounce(e => { if (e.target.value.trim().length > 2) rechercherAccession(); }, 350));
+  setTimeout(() => ni.focus(), 100);
+}
+
+function rechercherAccession() {
+  const code = document.getElementById("scan-code").value.trim().toUpperCase();
+  masquerAlerte("alerte-scan");
+  if (!code) return;
+  const acc = cacheAccessions[code];
+  if (acc) {
+    accessionCourante = { code, ...acc };
+    document.getElementById("scan-nomIntro").textContent = acc.nomIntro;
+    document.getElementById("scan-nomVar").textContent = acc.nomVar;
+    document.getElementById("scan-info-bloc").style.display = "block";
+    ["scan-milieu","scan-nbApex","scan-nbMeristemes","scan-commentaire"].forEach(id => document.getElementById(id).value = "");
+    setTimeout(() => document.getElementById("btn-confirmer").focus(), 50);
+  } else {
+    accessionCourante = null;
+    document.getElementById("scan-info-bloc").style.display = "none";
+    if (code.length > 2) { afficherAlerte("alerte-scan", `Code "${code}" introuvable.`, "erreur"); flashEcran("rouge"); }
+  }
+}
+
+function annulerScan() {
+  accessionCourante = null;
+  document.getElementById("scan-code").value = "";
+  document.getElementById("scan-info-bloc").style.display = "none";
+  masquerAlerte("alerte-scan");
+  document.getElementById("scan-code").focus();
+}
+
+async function enregistrerScan(reussite) {
+  if (!accessionCourante || enRegistrement) return;
+  const cfg = PARTENAIRE_CONFIG.champs || {};
+  if (cfg.milieu?.requis && !document.getElementById("scan-milieu").value.trim()) return afficherAlerte("alerte-scan", "Milieu obligatoire.", "erreur");
+  if (cfg.nbApex?.requis && !document.getElementById("scan-nbApex").value) return afficherAlerte("alerte-scan", "Nb apex obligatoire.", "erreur");
+  if (cfg.nbMeristemes?.requis && !document.getElementById("scan-nbMeristemes").value) return afficherAlerte("alerte-scan", "Nb méristèmes obligatoire.", "erreur");
+  enRegistrement = true;
+  const bc = document.getElementById("btn-confirmer"), be = document.getElementById("btn-echec");
+  bc.disabled = be.disabled = true;
+  if (reussite) be.innerHTML = 'Enregistrement <span class="spinner"></span>';
+  else bc.innerHTML = 'Enregistrement <span class="spinner"></span>';
+  const fields = {
+    CodeIntro: accessionCourante.id, Methode: session.methode, Etape: session.etape,
+    Date: Math.floor(new Date(session.date).getTime() / 1000), Operateur: session.operateur,
+    Emplacement: session.emplacement, CodePartenaire: session.codePartenaire
+  };
+  const milieu = document.getElementById("scan-milieu").value;
+  const nbApex = parseInt(document.getElementById("scan-nbApex").value) || null;
+  const nbMeristemes = parseInt(document.getElementById("scan-nbMeristemes").value) || null;
+  const commentaire = document.getElementById("scan-commentaire").value;
+  if (reussite)    fields.Reussite     = reussite;
+  if (commentaire) fields.Commentaires = commentaire;
+  if (milieu)      fields.Milieu       = milieu;
+  if (nbApex)      fields.NbApex       = nbApex;
+  if (nbMeristemes)fields.NbMeristemes = nbMeristemes;
+  try {
+    const result = await grist.docApi.applyUserActions([["AddRecord", "Suivi2", null, fields]]);
+    const gristId = result.retValues[0];
+    const estEchec = reussite === "Échec";
+    scansSession.push({ code: accessionCourante.code, nom: accessionCourante.nomIntro, ok: true, echec: estEchec, gristId });
+    mettreAJourCompteur(); flashEcran(estEchec ? "rouge" : "vert"); annulerScan();
+  } catch(e) {
+    scansSession.push({ code: accessionCourante.code, nom: accessionCourante.nomIntro, ok: false, echec: false });
+    afficherAlerte("alerte-scan", "Erreur : " + e.message, "erreur"); flashEcran("rouge");
+  }
+  enRegistrement = false; bc.disabled = be.disabled = false;
+  bc.textContent = "Confirmer ✓"; be.textContent = "Déclarer échec ✗";
+}
+
+function mettreAJourCompteur() {
+  const nb = scansSession.filter(s => s.ok).length;
+  const nbEchec = scansSession.filter(s => s.echec).length;
+  document.getElementById("badge-compteur").textContent = nb + " scan" + (nb>1?"s":"") + (nbEchec>0?` (${nbEchec} échec${nbEchec>1?"s":""})`:"");
+  document.getElementById("nb-scans-titre").textContent = "(" + scansSession.length + ")";
+  document.getElementById("liste-scans").innerHTML = [...scansSession].map((s, i) => {
+    let statut, cls;
+    if (!s.ok) { statut="Erreur"; cls="err"; } else if (s.echec) { statut="Échec"; cls="echec"; } else { statut="OK"; cls="ok"; }
+    return `<div class="scan-item"><span class="scan-code">${s.code}</span><span class="scan-nom">${s.nom}</span><span class="scan-statut ${cls}">${statut}</span>${s.ok?`<button onclick="annulerDernierScan(${i})" style="background:none;border:none;cursor:pointer;color:var(--erreur);font-size:14px;padding:0 4px;">✕</button>`:""}</div>`;
+  }).reverse().join("");
+  document.getElementById("section-historique").style.display = "block";
+}
+
+async function annulerDernierScan(index) {
+  const scan = scansSession[index];
+  if (!scan || !scan.gristId) return;
+  try { await grist.docApi.applyUserActions([["RemoveRecord", "Suivi2", scan.gristId]]); scansSession.splice(index, 1); mettreAJourCompteur(); }
+  catch(e) { afficherAlerte("alerte-scan", "Impossible d'annuler : " + e.message, "erreur"); }
+}
+
+function flashEcran(couleur) { const el = document.getElementById("flash"); el.className = "flash-overlay " + couleur + " actif"; setTimeout(() => el.classList.remove("actif"), 350); }
+
+function terminerSession() {
+  const nb = scansSession.filter(s=>s.ok).length, nbEchec = scansSession.filter(s=>s.echec).length, nbErr = scansSession.filter(s=>!s.ok).length;
+  document.getElementById("fin-resume").innerHTML = `<strong>Partenaire :</strong> ${PARTENAIRE_CONFIG.nom}<br><strong>Étape :</strong> ${session.etapeNom}<br><strong>Méthode :</strong> ${session.methode}<br><strong>Date :</strong> ${session.date}<br><strong>Opérateur :</strong> ${session.operateurNom}<br><strong>Emplacement :</strong> ${session.emplacement}<br><strong>Scans enregistrés :</strong> ${nb}<br>${nbEchec>0?`<strong style="color:#e65100">Échecs :</strong> ${nbEchec}<br>`:""}${nbErr>0?`<strong style="color:var(--erreur)">Erreurs :</strong> ${nbErr}`:""}`;
+  afficherEcran("ecran-fin");
+}
+
+function nouvelleSession() {
+  session={}; scansSession=[]; accessionCourante=null; enRegistrement=false;
+  document.getElementById("scan-code").value="";
+  document.getElementById("scan-info-bloc").style.display="none";
+  document.getElementById("section-historique").style.display="none";
+  document.getElementById("cfg-date").value=new Date().toISOString().split("T")[0];
+  afficherEcran("ecran-config");
+}
+
+function afficherEcran(id) { document.querySelectorAll(".ecran").forEach(e=>e.classList.remove("actif")); document.getElementById(id).classList.add("actif"); window.scrollTo(0,0); }
+function afficherAlerte(id, msg, type) { const el=document.getElementById(id); el.textContent=msg; el.className="alerte "+type; }
+function masquerAlerte(id) { const el=document.getElementById(id); el.className="alerte"; el.textContent=""; }
 </script>
-<script>
-// Charge le formulaire core (index.html) dans cette page
-// PARTENAIRE_CONFIG est déjà défini ci-dessus quand init() s'exécute
-document.addEventListener("DOMContentLoaded", () => {
-  fetch("index.html")
-    .then(r => r.text())
-    .then(html => {
-      const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-      if (!bodyMatch) return;
-      document.body.innerHTML = bodyMatch[1];
-      // Réexécuter les scripts inline du core
-      document.querySelectorAll("body script:not([src])").forEach(old => {
-        const s = document.createElement("script");
-        s.textContent = old.textContent;
-        old.replaceWith(s);
-      });
-    })
-    .catch(() => {
-      document.body.innerHTML = '<div style="padding:40px;font-family:monospace;color:#c0392b">Erreur : impossible de charger index.html</div>';
-    });
-});
-</script>
-</head>
-<body>
-<div style="text-align:center;padding:40px;font-family:monospace;color:#5a5a54">
-  Chargement…
-</div>
 </body>
 </html>
