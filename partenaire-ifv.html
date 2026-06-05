@@ -173,7 +173,7 @@ textarea { resize: vertical; min-height: 60px; }
 // ════════════════════════════════════════════════
 const PARTENAIRE_CONFIG = {
   code: "IFV",
-  nom: "IFV Assainissement Vassal",
+  nom: "IFV Vassal",
   methodes: ["Thermotherapie + Microgreffage"],
   methodeImposee: true,
   // Toutes les étapes NON-IFV sont exclues.
@@ -184,8 +184,7 @@ const PARTENAIRE_CONFIG = {
     // Étapes spécifiques Cryotherapie
     "B_CAISSON_CHAUD","B_CRYOTHERAPIE","B_REGEN_MERISTE","B_MULT_PLANTES",
     // Étape phase finale (pas pertinente pour IFV)
-   "F_ACCLIMATATION","F_TEST_SANITAIRE_PCR","F_SERRE_CHAUDE","F_SERRE_FROIDE","F_RECOLTE_BOIS","F_TEST_SANITAIRE_ELISA","F_RECOLTE_DOUBLON","F_DOUBLON_SECU","F_TEC_SAINES",
-    "F_TRANSMISSION_PEP","F_GREFFAGE","F_RECEPTION_PECH","F_PLANTATION","F_SUIVI_PLANTATION","CHGT_METHODE",
+    "F_ACCLIMATATION","F_TEST_SANITAIRE_PCR","F_SERRE_CHAUDE","F_SERRE_FROIDE","F_RECOLTE_BOIS","F_TEST_SANITAIRE_ELISA","F_RECOLTE_DOUBLON","F_DOUBLON_SECU","F_TEC_SAINES",
     // Étape commune non pertinente pour IFV
     "DEBOURREMENT"
   ],
@@ -200,7 +199,18 @@ const PARTENAIRE_CONFIG = {
 //  ▲▲▲ FIN DE LA PARTIE À MODIFIER ▲▲▲
 // ════════════════════════════════════════════════
 
+// Séquence obligatoire IFV
+const SEQUENCE_IFV = [
+  "RECEPTION","TEC_VIROSEES","C_BOUTURAGE","C_CONT_TABLARD",
+  "C_THERMOTHERAPIE","C_MICROGREFFAGE","C_REGEN_MERISTE",
+  "C_CONTROLE","C_MICROBOUTURAGE","F_TRANSMISSION_INRAE"
+];
+const ETAPE_OPTIONNELLE  = "C_MICROBOUTURAGE";
+const ETAPE_CONTROLE     = "C_CONTROLE";
+const SEUIL_MICROGREFFES = 8;
+
 let cacheAccessions = {}, cacheOperateurs = [], cacheEtapes = [];
+let cacheSuivi = [];
 let session = {}, scansSession = [], accessionCourante = null, enRegistrement = false;
 
 grist.ready({ requiredAccess: "full" });
@@ -258,6 +268,16 @@ async function chargerDonnees() {
     if (PARTENAIRE_CONFIG.methodeImposee && dispo.length === 1) { selM.value = dispo[0]; selM.disabled = true; filtrerEtapesConfig(); }
 
     accs.id.forEach((id, i) => { const c = accs.CodeIntro[i]; if (c) cacheAccessions[c.toUpperCase()] = { id, nomIntro: accs.NomIntro[i] || "—", nomVar: accs.NomVar[i] || "—" }; });
+
+    // Charger tout Suivi2 pour validation de séquence
+    const suivi = await grist.docApi.fetchTable("Suivi2");
+    cacheSuivi = suivi.id.map((id, i) => ({
+      id,
+      codeIntroId: suivi.CodeIntro[i],
+      etapeId:     suivi.Etape[i],
+      nbMeristemes:suivi.NbMeristemes ? suivi.NbMeristemes[i] : null,
+      date:        suivi.Date[i]
+    }));
   } catch(e) { afficherAlerte("alerte-config", "Erreur de chargement : " + e.message, "erreur"); }
 }
 
@@ -297,17 +317,95 @@ function demarrerSession() {
   setTimeout(() => ni.focus(), 100);
 }
 
+// ── Retourne le code d une étape Grist à partir de son id ──
+function codeEtapeParId(id) {
+  const e = cacheEtapes.find(e => e.id === id);
+  return e ? e.code : null;
+}
+
+// ── Valide que l accession peut passer à l étape de session ──
+// Retourne null si OK, ou un message d erreur
+function validerSequence(accId, etapeSessionCode) {
+  // Historique de cette accession, trié par date décroissante
+  const historique = cacheSuivi
+    .filter(r => r.codeIntroId === accId)
+    .sort((a, b) => b.date - a.date);
+
+  const idxCible = SEQUENCE_IFV.indexOf(etapeSessionCode);
+  if (idxCible === -1) return null; // étape hors séquence, on ne bloque pas
+
+  if (historique.length === 0) {
+    // Aucun historique → seule RECEPTION est autorisée
+    if (etapeSessionCode !== "RECEPTION")
+      return "Cette accession n'a pas encore été réceptionnée (étape Réception manquante).";
+    return null;
+  }
+
+  // Dernière étape enregistrée
+  const derniereEtapeCode = codeEtapeParId(historique[0].etapeId);
+  const idxDerniere = SEQUENCE_IFV.indexOf(derniereEtapeCode);
+
+  // Étape déjà faite ?
+  if (idxCible <= idxDerniere && etapeSessionCode !== ETAPE_OPTIONNELLE) {
+    // Exception : C_MICROBOUTURAGE peut être fait après C_CONTROLE
+    if (!(etapeSessionCode === ETAPE_OPTIONNELLE && idxDerniere === SEQUENCE_IFV.indexOf("C_CONTROLE")))
+      return `Étape déjà enregistrée ou dépassée. Dernière étape : ${derniereEtapeCode}.`;
+  }
+
+  // Étape suivante attendue
+  let idxAttendu = idxDerniere + 1;
+  // Si la prochaine étape attendue est optionnelle et qu on la saute, c est OK
+  if (SEQUENCE_IFV[idxAttendu] === ETAPE_OPTIONNELLE && etapeSessionCode !== ETAPE_OPTIONNELLE) {
+    idxAttendu++; // on saute l optionnelle
+  }
+
+  if (idxCible !== idxAttendu && idxCible !== idxDerniere + 1) {
+    const attendu = SEQUENCE_IFV[idxAttendu] || "—";
+    return `Étape incorrecte. Étape attendue : ${attendu}.`;
+  }
+
+  return null;
+}
+
+// ── Vérifie si l accession a eu < 8 microgreffes et n a pas fait microbouturage ──
+function alerteConformite(accId) {
+  const historique = cacheSuivi.filter(r => r.codeIntroId === accId);
+  const controle = historique.find(r => codeEtapeParId(r.etapeId) === ETAPE_CONTROLE);
+  if (!controle) return null;
+  const nb = controle.nbMeristemes;
+  if (nb !== null && nb < SEUIL_MICROGREFFES) {
+    const aMicrobouturage = historique.some(r => codeEtapeParId(r.etapeId) === ETAPE_OPTIONNELLE);
+    if (!aMicrobouturage)
+      return `⚠️ ${nb} microgreffe(s) conforme(s) enregistrée(s) au contrôle (seuil : ${SEUIL_MICROGREFFES}). Microbouturage recommandé avant transmission.`;
+  }
+  return null;
+}
+
 function rechercherAccession() {
   const code = document.getElementById("scan-code").value.trim().toUpperCase();
   masquerAlerte("alerte-scan");
   if (!code) return;
   const acc = cacheAccessions[code];
   if (acc) {
+    // Validation de séquence
+    const etapeSessionCode = cacheEtapes.find(e => e.id === session.etape)?.code;
+    const erreurSeq = validerSequence(acc.id, etapeSessionCode);
+    if (erreurSeq) {
+      afficherAlerte("alerte-scan", erreurSeq, "erreur");
+      flashEcran("rouge");
+      return;
+    }
+
     accessionCourante = { code, ...acc };
     document.getElementById("scan-nomIntro").textContent = acc.nomIntro;
     document.getElementById("scan-nomVar").textContent = acc.nomVar;
     document.getElementById("scan-info-bloc").style.display = "block";
     ["scan-milieu","scan-nbApex","scan-nbMeristemes","scan-commentaire"].forEach(id => document.getElementById(id).value = "");
+
+    // Alerte conformité (orange, non bloquante)
+    const alerteConf = alerteConformite(acc.id);
+    if (alerteConf) afficherAlerte("alerte-scan", alerteConf, "info");
+
     setTimeout(() => document.getElementById("btn-confirmer").focus(), 50);
   } else {
     accessionCourante = null;
@@ -353,6 +451,14 @@ async function enregistrerScan(reussite) {
     const result = await grist.docApi.applyUserActions([["AddRecord", "Suivi2", null, fields]]);
     const gristId = result.retValues[0];
     const estEchec = reussite === "Échec";
+    // Mettre à jour cacheSuivi localement pour que la validation fonctionne immédiatement
+    cacheSuivi.push({
+      id: gristId,
+      codeIntroId: accessionCourante.id,
+      etapeId: session.etape,
+      nbMeristemes: nbMeristemes,
+      date: Math.floor(new Date(session.date).getTime() / 1000)
+    });
     scansSession.push({ code: accessionCourante.code, nom: accessionCourante.nomIntro, ok: true, echec: estEchec, gristId });
     mettreAJourCompteur(); flashEcran(estEchec ? "rouge" : "vert"); annulerScan();
   } catch(e) {
@@ -379,7 +485,12 @@ function mettreAJourCompteur() {
 async function annulerDernierScan(index) {
   const scan = scansSession[index];
   if (!scan || !scan.gristId) return;
-  try { await grist.docApi.applyUserActions([["RemoveRecord", "Suivi2", scan.gristId]]); scansSession.splice(index, 1); mettreAJourCompteur(); }
+  try {
+    await grist.docApi.applyUserActions([["RemoveRecord", "Suivi2", scan.gristId]]);
+    scansSession.splice(index, 1);
+    cacheSuivi = cacheSuivi.filter(r => r.id !== scan.gristId);
+    mettreAJourCompteur();
+  }
   catch(e) { afficherAlerte("alerte-scan", "Impossible d'annuler : " + e.message, "erreur"); }
 }
 
