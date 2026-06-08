@@ -176,16 +176,16 @@ const PARTENAIRE_CONFIG = {
   nom: "IFV Vassal",
   methodes: ["Thermotherapie + Microgreffage"],
   methodeImposee: true,
-  // Toutes les étapes NON-IFV sont exclues.
-  // Les étapes IFV commencent par C_ et sont automatiquement incluses.
   etapesExclues: [
     // Étapes spécifiques Thermotherapie+Regeneration
     "A_CULTURE_IV","A_MULT_BOUTURES","A_THERMOTHERAPIE","A_REGEN_MERISTE","A_MULT_PLANTES",
     // Étapes spécifiques Cryotherapie
     "B_CAISSON_CHAUD","B_CRYOTHERAPIE","B_REGEN_MERISTE","B_MULT_PLANTES",
-    // Étape phase finale (pas pertinente pour IFV)
-    "F_ACCLIMATATION","F_TEST_SANITAIRE_PCR","F_SERRE_CHAUDE","F_SERRE_FROIDE","F_RECOLTE_BOIS","F_TEST_SANITAIRE_ELISA","F_RECOLTE_DOUBLON","F_DOUBLON_SECU","F_TEC_SAINES","F_TRANSMISSION_PEP","F_GREFFAGE",
-    "F_RECEPTION_PECH","F_PLANTATION","F_SUIVI_PLANTATION","CHGT_METHODE",
+    // Étapes phase finale non pertinentes pour IFV
+    "F_ACCLIMATATION","F_TEST_SANITAIRE_PCR","F_SERRE_CHAUDE","F_SERRE_FROIDE",
+    "F_RECOLTE_BOIS","F_TEST_SANITAIRE_ELISA","F_RECOLTE_DOUBLON","F_DOUBLON_SECU","F_TEC_SAINES",
+    "F_TRANSMISSION_PEP","F_GREFFAGE","F_RECEPTION_PECH","F_PLANTATION","F_SUIVI_PLANTATION",
+    "CHGT_METHODE",
     // Étape commune non pertinente pour IFV
     "DEBOURREMENT"
   ],
@@ -290,7 +290,7 @@ function filtrerEtapesConfig() {
   cacheEtapes.filter(e => e.methode === m || e.methode === "Commune").forEach(e => sel.innerHTML += `<option value="${e.id}">${e.nom}</option>`);
 }
 
-function demarrerSession() {
+async function demarrerSession() {
   masquerAlerte("alerte-config");
   const date = document.getElementById("cfg-date").value;
   const operateur = document.getElementById("cfg-operateur").value;
@@ -310,6 +310,19 @@ function demarrerSession() {
   document.getElementById("badge-etape").textContent = etapeNom;
   document.getElementById("badge-info").textContent = `${PARTENAIRE_CONFIG.nom} · ${methode} · ${opNom} · ${emplacement}`;
   document.getElementById("badge-compteur").textContent = "0 scan";
+  // Recharger Suivi2 à chaque démarrage de session pour avoir l'historique à jour
+  try {
+    const suivi = await grist.docApi.fetchTable("Suivi2");
+    cacheSuivi = suivi.id.map((id, i) => ({
+      id,
+      codeIntroId:  suivi.CodeIntro[i],
+      etapeId:      suivi.Etape[i],
+      nbMeristemes: suivi.NbMeristemes ? suivi.NbMeristemes[i] : null,
+      date:         suivi.Date[i]
+    }));
+  } catch(e) {
+    console.warn("Impossible de recharger Suivi2 :", e);
+  }
   afficherEcran("ecran-scan");
   const si = document.getElementById("scan-code"); si.replaceWith(si.cloneNode(true));
   const ni = document.getElementById("scan-code");
@@ -327,40 +340,38 @@ function codeEtapeParId(id) {
 // ── Valide que l accession peut passer à l étape de session ──
 // Retourne null si OK, ou un message d erreur
 function validerSequence(accId, etapeSessionCode) {
-  // Historique de cette accession, trié par date décroissante
+  const idxCible = SEQUENCE_IFV.indexOf(etapeSessionCode);
+  if (idxCible === -1) return null; // étape hors séquence connue, on ne bloque pas
+
+  // Historique de cette accession, trié par date croissante
   const historique = cacheSuivi
     .filter(r => r.codeIntroId === accId)
-    .sort((a, b) => b.date - a.date);
-
-  const idxCible = SEQUENCE_IFV.indexOf(etapeSessionCode);
-  if (idxCible === -1) return null; // étape hors séquence, on ne bloque pas
+    .sort((a, b) => a.date - b.date);
 
   if (historique.length === 0) {
-    // Aucun historique → seule RECEPTION est autorisée
     if (etapeSessionCode !== "RECEPTION")
-      return "Cette accession n'a pas encore été réceptionnée (étape Réception manquante).";
+      return "Cette accession n'a pas encore été réceptionnée.";
     return null;
   }
 
   // Dernière étape enregistrée
-  const derniereEtapeCode = codeEtapeParId(historique[0].etapeId);
+  const derniereEtapeCode = codeEtapeParId(historique[historique.length - 1].etapeId);
   const idxDerniere = SEQUENCE_IFV.indexOf(derniereEtapeCode);
 
-  // Étape déjà faite ?
-  if (idxCible <= idxDerniere && etapeSessionCode !== ETAPE_OPTIONNELLE) {
-    // Exception : C_MICROBOUTURAGE peut être fait après C_CONTROLE
-    if (!(etapeSessionCode === ETAPE_OPTIONNELLE && idxDerniere === SEQUENCE_IFV.indexOf("C_CONTROLE")))
-      return `Étape déjà enregistrée ou dépassée. Dernière étape : ${derniereEtapeCode}.`;
+  // Étape déjà faite (et pas optionnelle en reprise)
+  if (idxCible <= idxDerniere) {
+    if (etapeSessionCode === ETAPE_OPTIONNELLE) return null; // microbouturage toujours OK après contrôle
+    return `Étape déjà enregistrée ou dépassée. Dernière étape : ${derniereEtapeCode}.`;
   }
 
-  // Étape suivante attendue
+  // Calculer l'étape suivante attendue
   let idxAttendu = idxDerniere + 1;
-  // Si la prochaine étape attendue est optionnelle et qu on la saute, c est OK
+  // Sauter l'optionnelle si on ne la demande pas
   if (SEQUENCE_IFV[idxAttendu] === ETAPE_OPTIONNELLE && etapeSessionCode !== ETAPE_OPTIONNELLE) {
-    idxAttendu++; // on saute l optionnelle
+    idxAttendu++;
   }
 
-  if (idxCible !== idxAttendu && idxCible !== idxDerniere + 1) {
+  if (idxCible !== idxAttendu) {
     const attendu = SEQUENCE_IFV[idxAttendu] || "—";
     return `Étape incorrecte. Étape attendue : ${attendu}.`;
   }
