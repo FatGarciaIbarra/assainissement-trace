@@ -310,19 +310,30 @@ function getMicrogreffes(accId) {
 // AJOUT : validation de séquence
 function validerSequence(accId, etapeCode) {
   const historique = cacheSuivi
-  .filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) !== null)
-  .sort((a,b) => b.date - a.date || b.id - a.id);
+    .filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) !== null)
+    .sort((a,b) => b.date - a.date || b.id - a.id);
+
   const idxCible = SEQUENCE_IFV.indexOf(etapeCode);
   if (idxCible === -1) return null;
+
+  // Seul cas bloquant : accession jamais réceptionnée
   if (historique.length === 0) {
-    return etapeCode !== "RECEPTION" ? "Accession non encore réceptionnée." : null;
+    return etapeCode !== "RECEPTION"
+      ? { bloquant: true, message: "Accession non encore réceptionnée." }
+      : null;
   }
+
+  // Tout le reste : alerte non bloquante
   const derniereEtapeCode = codeEtapeParId(historique[0].etapeId);
   const idxDerniere = SEQUENCE_IFV.indexOf(derniereEtapeCode);
   let idxAttendu = idxDerniere + 1;
   if (SEQUENCE_IFV[idxAttendu] === ETAPE_OPTIONNELLE && etapeCode !== ETAPE_OPTIONNELLE) idxAttendu++;
-  if (idxCible < idxAttendu) return `Étape déjà enregistrée. Dernière étape : ${derniereEtapeCode}.`;
-  if (idxCible > idxAttendu) return `Étape incorrecte. Étape attendue : ${SEQUENCE_IFV[idxAttendu]}.`;
+
+  if (idxCible < idxAttendu)
+    return { bloquant: false, message: `⚠️ Étape déjà enregistrée. Dernière étape : ${derniereEtapeCode}.` };
+  if (idxCible > idxAttendu)
+    return { bloquant: false, message: `⚠️ Étape inattendue. Étape attendue : ${SEQUENCE_IFV[idxAttendu]}.` };
+
   return null;
 }
 
@@ -433,7 +444,15 @@ function rechercherAccession() {
     // AJOUT : validation séquence
     const etapeCode = codeEtapeParId(session.etape);
     const erreurSeq = validerSequence(acc.id, etapeCode);
-    if (erreurSeq) { afficherAlerte("alerte-scan", erreurSeq, "erreur"); flashEcran("rouge"); return; }
+if (erreurSeq) {
+  if (erreurSeq.bloquant) {
+    afficherAlerte("alerte-scan", erreurSeq.message, "erreur");
+    flashEcran("rouge");
+    return;
+  } else {
+    afficherAlerte("alerte-scan", erreurSeq.message, "info");
+  }
+}
 
     accessionCourante = { code, ...acc };
     document.getElementById("scan-nomIntro").textContent = acc.nomIntro;
