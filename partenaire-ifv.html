@@ -309,7 +309,9 @@ function getMicrogreffes(accId) {
 
 // AJOUT : validation de séquence
 function validerSequence(accId, etapeCode) {
-  const historique = cacheSuivi.filter(r => r.codeIntroId === accId).sort((a,b) => b.date - a.date);
+  const historique = cacheSuivi
+  .filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) !== null)
+  .sort((a,b) => b.date - a.date);
   const idxCible = SEQUENCE_IFV.indexOf(etapeCode);
   if (idxCible === -1) return null;
   if (historique.length === 0) {
