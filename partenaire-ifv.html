@@ -336,6 +336,22 @@ function validerSequence(accId, etapeCode) {
 
   return null;
 }
+function validerSequenceParMG(accId, etapeCode, numMG) {
+  const historiqueMG = cacheSuivi
+    .filter(r => r.codeIntroId === accId && r.numMeristeme === numMG && codeEtapeParId(r.etapeId) !== null)
+    .sort((a,b) => b.date - a.date || b.id - a.id);
+
+  if (historiqueMG.length === 0) return null;
+
+  const derniereEtapeCode = codeEtapeParId(historiqueMG[0].etapeId);
+  const idxDerniere = SEQUENCE_IFV.indexOf(derniereEtapeCode);
+  const idxCible = SEQUENCE_IFV.indexOf(etapeCode);
+
+  if (idxCible <= idxDerniere)
+    return `⚠️ Ce microgreffe a déjà passé cette étape. Dernière étape : ${derniereEtapeCode}.`;
+
+  return null;
+}
 
 // AJOUT : alerte conformité
 function alerteConformite(accId) {
@@ -371,11 +387,17 @@ function afficherBlocsEtape(etapeCode, accId) {
     document.getElementById("mb-nb").value = "";
 
   } else if (ETAPES_POST_MG.includes(etapeCode) && etapeCode !== ETAPE_TRANSMISSION) {
-    document.getElementById("bloc-select-mg").style.display = "block";
-    const mgs = getMicrogreffes(accId);
-    const sel = document.getElementById("sel-microgreffe");
-    sel.innerHTML = '<option value="">— Choisir —</option>';
-    mgs.forEach(mg => sel.innerHTML += `<option value="${mg}">${mg}</option>`);
+  document.getElementById("bloc-select-mg").style.display = "block";
+  const mgs = getMicrogreffes(accId);
+  const sel = document.getElementById("sel-microgreffe");
+  sel.innerHTML = '<option value="">— Choisir —</option>';
+  mgs.forEach(mg => sel.innerHTML += `<option value="${mg}">${mg}</option>`);
+  sel.onchange = () => {
+    if (!sel.value) return;
+    const erreur = validerSequenceParMG(accId, etapeCode, sel.value);
+    if (erreur) afficherAlerte("alerte-scan", erreur, "info");
+    else masquerAlerte("alerte-scan");
+  };
 
   } else if (etapeCode === ETAPE_TRANSMISSION) {
     document.getElementById("bloc-select-mb").style.display = "block";
