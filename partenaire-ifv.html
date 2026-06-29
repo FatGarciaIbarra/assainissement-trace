@@ -512,38 +512,43 @@ async function enregistrerScan(reussite) {
 
   // AJOUT : cas microgreffage — créer N lignes
   if (etapeCode === ETAPE_MICROGREFFAGE) {
-    const nb = parseInt(document.getElementById("mg-nb").value);
-    if (!nb || nb < 1) return afficherAlerte("alerte-scan", "Indiquer le nombre de microgreffes.", "erreur");
-    enRegistrement = true;
-    const bc = document.getElementById("btn-confirmer"), be = document.getElementById("btn-echec");
-    bc.disabled = be.disabled = true;
-    bc.innerHTML = 'Enregistrement <span class="spinner"></span>';
-    const commentaire = document.getElementById("mg-commentaire").value;
-    const timestamp = Math.floor(new Date(session.date).getTime() / 1000);
-    const actions = [];
-    for (let i = 1; i <= nb; i++) {
-      const numMG = "M" + String(i).padStart(2, "0");
-      const existant = cacheSuivi.find(r => r.codeIntroId === accessionCourante.id && codeEtapeParId(r.etapeId) === ETAPE_MICROGREFFAGE && r.numMeristeme === numMG);
-      if (!existant) actions.push(["AddRecord", "Suivi2", null, {
-        CodeIntro: accessionCourante.id, Methode: session.methode, Etape: session.etape,
-        Date: timestamp, Operateur: session.operateur, Emplacement: session.emplacement,
-        CodePartenaire: session.codePartenaire, NumMeristeme: numMG,
-        ...(commentaire ? { Commentaires: commentaire } : {})
-      }]);
-    }
-    try {
-      const result = await grist.docApi.applyUserActions(actions);
-      result.retValues.forEach((gristId, i) => {
-        cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, numMeristeme: "M" + String(i+1).padStart(2,"0"), nbMeristemes: null, date: timestamp });
-      });
-      scansSession.push({ code: accessionCourante.code, nom: `${accessionCourante.nomIntro} (${nb} microgreffes)`, ok: true, echec: false, gristId: result.retValues[0], multi: true });
-      mettreAJourCompteur(); flashEcran("vert"); annulerScan();
-    } catch(e) { afficherAlerte("alerte-scan", "Erreur : " + e.message, "erreur"); flashEcran("rouge"); }
-    enRegistrement = false; bc.disabled = be.disabled = false;
-    bc.textContent = "Confirmer ✓"; be.textContent = "Déclarer échec ✗";
-    return;
-  }
+  const nb = parseInt(document.getElementById("mg-nb").value);
+  if (!nb || nb < 1) return afficherAlerte("alerte-scan", "Indiquer le nombre de microgreffes.", "erreur");
+  enRegistrement = true;
+  const bc = document.getElementById("btn-confirmer"), be = document.getElementById("btn-echec");
+  bc.disabled = be.disabled = true;
+  bc.innerHTML = 'Enregistrement <span class="spinner"></span>';
+  const commentaire = document.getElementById("mg-commentaire").value;
+  const timestamp = Math.floor(new Date(session.date).getTime() / 1000);
 
+  // Calculer le prochain numéro disponible au lieu de toujours repartir de 1
+  const existants = getMicrogreffes(accessionCourante.id);
+  const numerosExistants = existants.map(m => parseInt(m.replace("M",""))).filter(n => !isNaN(n));
+  const depart = numerosExistants.length > 0 ? Math.max(...numerosExistants) + 1 : 1;
+
+  const actions = [];
+  for (let i = 0; i < nb; i++) {
+    const numMG = "M" + String(depart + i).padStart(2, "0");
+    actions.push(["AddRecord", "Suivi2", null, {
+      CodeIntro: accessionCourante.id, Methode: session.methode, Etape: session.etape,
+      Date: timestamp, Operateur: session.operateur, Emplacement: session.emplacement,
+      CodePartenaire: session.codePartenaire, NumMeristeme: numMG,
+      ...(commentaire ? { Commentaires: commentaire } : {})
+    }]);
+  }
+  try {
+    const result = await grist.docApi.applyUserActions(actions);
+    result.retValues.forEach((gristId, i) => {
+      const numMG = "M" + String(depart + i).padStart(2, "0");
+      cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, numMeristeme: numMG, nbMeristemes: null, date: timestamp });
+    });
+    scansSession.push({ code: accessionCourante.code, nom: `${accessionCourante.nomIntro} (${nb} microgreffes)`, ok: true, echec: false, gristId: result.retValues[0], multi: true });
+    mettreAJourCompteur(); flashEcran("vert"); annulerScan();
+  } catch(e) { afficherAlerte("alerte-scan", "Erreur : " + e.message, "erreur"); flashEcran("rouge"); }
+  enRegistrement = false; bc.disabled = be.disabled = false;
+  bc.textContent = "Confirmer ✓"; be.textContent = "Déclarer échec ✗";
+  return;
+}
   // AJOUT : cas microbouturage — créer N lignes
   if (etapeCode === ETAPE_OPTIONNELLE) {
     const mgParente = document.getElementById("sel-mg-bouturage").value;
