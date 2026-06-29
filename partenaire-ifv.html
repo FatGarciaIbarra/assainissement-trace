@@ -129,27 +129,27 @@ textarea { resize: vertical; min-height: 60px; }
             <div class="info-item"><div class="info-label">Nom variété</div><div class="info-valeur" id="scan-nomVar">—</div></div>
           </div>
 
-          <!-- AJOUT : Bloc microgreffage -->
+          <!-- Bloc microgreffage -->
           <div class="champs-acc" id="bloc-microgreffage" style="display:none">
             <div class="champs-acc-titre">Microgreffage — nouveaux greffons</div>
             <div class="champ"><label>Nombre de microgreffes réalisées <span class="requis">*</span></label><input type="number" id="mg-nb" min="1" max="50" placeholder="Ex : 8"></div>
             <div class="champ"><label>Commentaire</label><textarea id="mg-commentaire" placeholder="Observation…"></textarea></div>
           </div>
 
-          <!-- AJOUT : Bloc sélection microgreffe -->
+          <!-- Bloc sélection microgreffe -->
           <div class="champs-acc" id="bloc-select-mg" style="display:none">
             <div class="champs-acc-titre">Sélectionner la microgreffe</div>
             <div class="champ"><label>Microgreffe <span class="requis">*</span></label><select id="sel-microgreffe"><option value="">— Choisir —</option></select></div>
           </div>
 
-          <!-- AJOUT : Bloc microbouturage -->
+          <!-- Bloc microbouturage -->
           <div class="champs-acc" id="bloc-microbouturage" style="display:none">
             <div class="champs-acc-titre">Microbouturage</div>
             <div class="champ"><label>Microgreffe parente <span class="requis">*</span></label><select id="sel-mg-bouturage"><option value="">— Choisir —</option></select></div>
             <div class="champ"><label>Nombre de microboutures <span class="requis">*</span></label><input type="number" id="mb-nb" min="1" max="50" placeholder="Ex : 3"></div>
           </div>
 
-          <!-- AJOUT : Bloc transmission avec sélection MG/MB -->
+          <!-- Bloc transmission avec sélection MG/MB -->
           <div class="champs-acc" id="bloc-select-mb" style="display:none">
             <div class="champs-acc-titre">Sélectionner la microgreffe / microbouture</div>
             <div class="champ"><label>Microgreffe <span class="requis">*</span></label><select id="sel-mg-transmission"><option value="">— Choisir —</option></select></div>
@@ -202,7 +202,8 @@ const PARTENAIRE_CONFIG = {
     "F_ACCLIMATATION","F_TEST_SANITAIRE_PCR","F_SERRE_CHAUDE","F_SERRE_FROIDE",
     "F_RECOLTE_BOIS","F_TEST_SANITAIRE_ELISA","F_RECOLTE_DOUBLON","F_DOUBLON_SECU","F_TEC_SAINES",
     "F_TRANSMISSION_PEP","F_GREFFAGE","F_RECEPTION_PECH","F_PLANTATION","F_SUIVI_PLANTATION",
-    "CHGT_METHODE","DEBOURREMENT"
+    "CHGT_METHODE","DEBOURREMENT",
+    "C_REGEN_MERISTE"
   ],
   champs: {
     milieu:       { visible: false, requis: false },
@@ -215,17 +216,18 @@ const PARTENAIRE_CONFIG = {
 //  ▲▲▲ FIN DE LA PARTIE À MODIFIER ▲▲▲
 // ════════════════════════════════════════════════
 
-// AJOUT : constantes séquence IFV
-const SEQUENCE_IFV = [
-  "RECEPTION","TEC_VIROSEES","C_BOUTURAGE","C_CONT_TABLARD",
-  "C_THERMOTHERAPIE","C_MICROGREFFAGE","C_REGEN_MERISTE",
-  "C_CONTROLE","C_MICROBOUTURAGE","F_TRANSMISSION_INRAE"
-];
+// Séquence stricte de base (avant le cycle) — chacune une fois, dans l'ordre
+const SEQUENCE_BASE = ["RECEPTION","TEC_VIROSEES","C_BOUTURAGE"];
+// Étapes du cycle libre plante mère (peuvent alterner librement une fois Bouturage fait)
+const ETAPES_CYCLE = ["C_CONTENEUR","C_TABLARD","C_THERMOTHERAPIE"];
+
 const ETAPE_MICROGREFFAGE = "C_MICROGREFFAGE";
 const ETAPE_OPTIONNELLE   = "C_MICROBOUTURAGE";
 const ETAPE_CONTROLE      = "C_CONTROLE";
 const ETAPE_TRANSMISSION  = "F_TRANSMISSION_INRAE";
-const ETAPES_POST_MG      = ["C_REGEN_MERISTE","C_CONTROLE","C_MICROBOUTURAGE","F_TRANSMISSION_INRAE"];
+// Séquence suivie par microgreffe individuelle (après prélèvement)
+const SEQUENCE_IFV   = ["C_MICROGREFFAGE","C_CONTROLE","C_MICROBOUTURAGE","F_TRANSMISSION_INRAE"];
+const ETAPES_POST_MG = ["C_CONTROLE","C_MICROBOUTURAGE","F_TRANSMISSION_INRAE"];
 const SEUIL_MICROGREFFES  = 8;
 
 let cacheAccessions = {}, cacheOperateurs = [], cacheEtapes = [];
@@ -300,42 +302,67 @@ function filtrerEtapesConfig() {
 function codeEtapeParId(id) { const e = cacheEtapes.find(e => e.id === id); return e ? e.code : null; }
 function nomEtapeParId(id)  { const e = cacheEtapes.find(e => e.id === id); return e ? e.nom : null; }
 
-// AJOUT : microgreffes existantes pour une accession
+// Microgreffes existantes pour une accession
 function getMicrogreffes(accId) {
   return [...new Set(cacheSuivi
     .filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) === ETAPE_MICROGREFFAGE && r.numMeristeme)
     .map(r => r.numMeristeme))].sort();
 }
 
-// AJOUT : validation de séquence
-function validerSequence(accId, etapeCode) {
+// ── Validation de l'étape pour la PLANTE MÈRE (accession) ──
+// Réception → TEC → Bouturage (strict, une fois chacune)
+// puis cycle libre Conteneur/Tablard/Thermothérapie (répétable, dans n'importe quel ordre)
+// puis Microgreffage (nécessite un passage par Thermothérapie, répétable ensuite)
+function validerEtapePlanteMere(accId, etapeCode) {
   const historique = cacheSuivi
     .filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) !== null)
     .sort((a,b) => b.date - a.date || b.id - a.id);
 
-  const idxCible = SEQUENCE_IFV.indexOf(etapeCode);
-  if (idxCible === -1) return null;
+  const codesHistorique = historique.map(r => codeEtapeParId(r.etapeId));
 
-  // Seul cas bloquant : accession jamais réceptionnée
-  if (historique.length === 0) {
-    return etapeCode !== "RECEPTION"
-      ? { bloquant: true, message: "Accession non encore réceptionnée." }
-      : null;
+  // ── Cas 1 : séquence de base stricte ──
+  const idxBase = SEQUENCE_BASE.indexOf(etapeCode);
+  if (idxBase !== -1) {
+    if (historique.length === 0) {
+      return etapeCode !== "RECEPTION"
+        ? { bloquant: true, message: "Accession non encore réceptionnée." }
+        : null;
+    }
+    const derniereBase = codesHistorique.find(c => SEQUENCE_BASE.includes(c));
+    const idxDerniereBase = derniereBase ? SEQUENCE_BASE.indexOf(derniereBase) : -1;
+    if (idxBase <= idxDerniereBase)
+      return { bloquant: false, message: `⚠️ Étape déjà enregistrée. Dernière étape : ${derniereBase}.` };
+    if (idxBase > idxDerniereBase + 1)
+      return { bloquant: false, message: `⚠️ Étape inattendue. Étape attendue : ${SEQUENCE_BASE[idxDerniereBase + 1]}.` };
+    return null;
   }
 
-  // Tout le reste : alerte non bloquante
-  const derniereEtapeCode = codeEtapeParId(historique[0].etapeId);
-  const idxDerniere = SEQUENCE_IFV.indexOf(derniereEtapeCode);
-  let idxAttendu = idxDerniere + 1;
-  if (SEQUENCE_IFV[idxAttendu] === ETAPE_OPTIONNELLE && etapeCode !== ETAPE_OPTIONNELLE) idxAttendu++;
+  // ── Cas 2 : cycle libre Conteneur/Tablard/Thermothérapie ──
+  if (ETAPES_CYCLE.includes(etapeCode)) {
+    const aFaitBouturage = codesHistorique.includes("C_BOUTURAGE");
+    if (!aFaitBouturage)
+      return { bloquant: true, message: "L'accession doit d'abord passer par le Bouturage." };
+    if (etapeCode === "C_CONTENEUR") {
+      const dejaDansTablardOuThermo = codesHistorique.some(c => c === "C_TABLARD" || c === "C_THERMOTHERAPIE");
+      if (dejaDansTablardOuThermo)
+        return { bloquant: false, message: "⚠️ Retour en Mise en conteneur après Tablard/Thermothérapie — inhabituel mais autorisé." };
+    }
+    return null; // libre dans le cycle
+  }
 
-  if (idxCible < idxAttendu)
-    return { bloquant: false, message: `⚠️ Étape déjà enregistrée. Dernière étape : ${derniereEtapeCode}.` };
-  if (idxCible > idxAttendu)
-    return { bloquant: false, message: `⚠️ Étape inattendue. Étape attendue : ${SEQUENCE_IFV[idxAttendu]}.` };
+  // ── Cas 3 : microgreffage ──
+  if (etapeCode === ETAPE_MICROGREFFAGE) {
+    const aPasseThermo = codesHistorique.includes("C_THERMOTHERAPIE");
+    if (!aPasseThermo)
+      return { bloquant: true, message: "L'accession doit être passée par la Thermothérapie avant le microgreffage." };
+    return null; // répétable librement ensuite
+  }
 
+  // ── Cas 4 : étapes suivies par microgreffe — pas de validation au niveau accession ──
   return null;
 }
+
+// ── Validation par MICROGREFFE individuelle (Contrôle, Microbouturage, Transmission) ──
 function validerSequenceParMG(accId, etapeCode, numMG) {
   const historiqueMG = cacheSuivi
     .filter(r => r.codeIntroId === accId && r.numMeristeme === numMG && codeEtapeParId(r.etapeId) !== null)
@@ -353,7 +380,7 @@ function validerSequenceParMG(accId, etapeCode, numMG) {
   return null;
 }
 
-// AJOUT : alerte conformité
+// Alerte conformité
 function alerteConformite(accId) {
   const historique = cacheSuivi.filter(r => r.codeIntroId === accId);
   const controle = historique.find(r => codeEtapeParId(r.etapeId) === ETAPE_CONTROLE);
@@ -364,7 +391,7 @@ function alerteConformite(accId) {
   return null;
 }
 
-// AJOUT : afficher les bons blocs selon l'étape
+// Afficher les bons blocs selon l'étape
 function afficherBlocsEtape(etapeCode, accId) {
   document.getElementById("bloc-microgreffage").style.display  = "none";
   document.getElementById("bloc-select-mg").style.display      = "none";
@@ -387,17 +414,17 @@ function afficherBlocsEtape(etapeCode, accId) {
     document.getElementById("mb-nb").value = "";
 
   } else if (ETAPES_POST_MG.includes(etapeCode) && etapeCode !== ETAPE_TRANSMISSION) {
-  document.getElementById("bloc-select-mg").style.display = "block";
-  const mgs = getMicrogreffes(accId);
-  const sel = document.getElementById("sel-microgreffe");
-  sel.innerHTML = '<option value="">— Choisir —</option>';
-  mgs.forEach(mg => sel.innerHTML += `<option value="${mg}">${mg}</option>`);
-  sel.onchange = () => {
-    if (!sel.value) return;
-    const erreur = validerSequenceParMG(accId, etapeCode, sel.value);
-    if (erreur) afficherAlerte("alerte-scan", erreur, "info");
-    else masquerAlerte("alerte-scan");
-  };
+    document.getElementById("bloc-select-mg").style.display = "block";
+    const mgs = getMicrogreffes(accId);
+    const sel = document.getElementById("sel-microgreffe");
+    sel.innerHTML = '<option value="">— Choisir —</option>';
+    mgs.forEach(mg => sel.innerHTML += `<option value="${mg}">${mg}</option>`);
+    sel.onchange = () => {
+      if (!sel.value) return;
+      const erreur = validerSequenceParMG(accId, etapeCode, sel.value);
+      if (erreur) afficherAlerte("alerte-scan", erreur, "info");
+      else masquerAlerte("alerte-scan");
+    };
 
   } else if (etapeCode === ETAPE_TRANSMISSION) {
     document.getElementById("bloc-select-mb").style.display = "block";
@@ -463,18 +490,17 @@ function rechercherAccession() {
   if (!code) return;
   const acc = cacheAccessions[code];
   if (acc) {
-    // AJOUT : validation séquence
     const etapeCode = codeEtapeParId(session.etape);
-    const erreurSeq = validerSequence(acc.id, etapeCode);
-if (erreurSeq) {
-  if (erreurSeq.bloquant) {
-    afficherAlerte("alerte-scan", erreurSeq.message, "erreur");
-    flashEcran("rouge");
-    return;
-  } else {
-    afficherAlerte("alerte-scan", erreurSeq.message, "info");
-  }
-}
+    const erreurSeq = validerEtapePlanteMere(acc.id, etapeCode);
+    if (erreurSeq) {
+      if (erreurSeq.bloquant) {
+        afficherAlerte("alerte-scan", erreurSeq.message, "erreur");
+        flashEcran("rouge");
+        return;
+      } else {
+        afficherAlerte("alerte-scan", erreurSeq.message, "info");
+      }
+    }
 
     accessionCourante = { code, ...acc };
     document.getElementById("scan-nomIntro").textContent = acc.nomIntro;
@@ -483,10 +509,8 @@ if (erreurSeq) {
     document.getElementById("scan-nbMeristemes").value = "";
     document.getElementById("scan-commentaire").value = "";
 
-    // AJOUT : afficher les bons blocs
     afficherBlocsEtape(etapeCode, acc.id);
 
-    // AJOUT : alerte conformité
     const alerteConf = alerteConformite(acc.id);
     if (alerteConf) afficherAlerte("alerte-scan", alerteConf, "info");
 
@@ -510,46 +534,46 @@ async function enregistrerScan(reussite) {
   if (!accessionCourante || enRegistrement) return;
   const etapeCode = codeEtapeParId(session.etape);
 
-  // AJOUT : cas microgreffage — créer N lignes
+  // ── Cas microgreffage — créer N lignes, en continuant la numérotation existante ──
   if (etapeCode === ETAPE_MICROGREFFAGE) {
-  const nb = parseInt(document.getElementById("mg-nb").value);
-  if (!nb || nb < 1) return afficherAlerte("alerte-scan", "Indiquer le nombre de microgreffes.", "erreur");
-  enRegistrement = true;
-  const bc = document.getElementById("btn-confirmer"), be = document.getElementById("btn-echec");
-  bc.disabled = be.disabled = true;
-  bc.innerHTML = 'Enregistrement <span class="spinner"></span>';
-  const commentaire = document.getElementById("mg-commentaire").value;
-  const timestamp = Math.floor(new Date(session.date).getTime() / 1000);
+    const nb = parseInt(document.getElementById("mg-nb").value);
+    if (!nb || nb < 1) return afficherAlerte("alerte-scan", "Indiquer le nombre de microgreffes.", "erreur");
+    enRegistrement = true;
+    const bc = document.getElementById("btn-confirmer"), be = document.getElementById("btn-echec");
+    bc.disabled = be.disabled = true;
+    bc.innerHTML = 'Enregistrement <span class="spinner"></span>';
+    const commentaire = document.getElementById("mg-commentaire").value;
+    const timestamp = Math.floor(new Date(session.date).getTime() / 1000);
 
-  // Calculer le prochain numéro disponible au lieu de toujours repartir de 1
-  const existants = getMicrogreffes(accessionCourante.id);
-  const numerosExistants = existants.map(m => parseInt(m.replace("M",""))).filter(n => !isNaN(n));
-  const depart = numerosExistants.length > 0 ? Math.max(...numerosExistants) + 1 : 1;
+    const existants = getMicrogreffes(accessionCourante.id);
+    const numerosExistants = existants.map(m => parseInt(m.replace("M",""))).filter(n => !isNaN(n));
+    const depart = numerosExistants.length > 0 ? Math.max(...numerosExistants) + 1 : 1;
 
-  const actions = [];
-  for (let i = 0; i < nb; i++) {
-    const numMG = "M" + String(depart + i).padStart(2, "0");
-    actions.push(["AddRecord", "Suivi2", null, {
-      CodeIntro: accessionCourante.id, Methode: session.methode, Etape: session.etape,
-      Date: timestamp, Operateur: session.operateur, Emplacement: session.emplacement,
-      CodePartenaire: session.codePartenaire, NumMeristeme: numMG,
-      ...(commentaire ? { Commentaires: commentaire } : {})
-    }]);
-  }
-  try {
-    const result = await grist.docApi.applyUserActions(actions);
-    result.retValues.forEach((gristId, i) => {
+    const actions = [];
+    for (let i = 0; i < nb; i++) {
       const numMG = "M" + String(depart + i).padStart(2, "0");
-      cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, numMeristeme: numMG, nbMeristemes: null, date: timestamp });
-    });
-    scansSession.push({ code: accessionCourante.code, nom: `${accessionCourante.nomIntro} (${nb} microgreffes)`, ok: true, echec: false, gristId: result.retValues[0], multi: true });
-    mettreAJourCompteur(); flashEcran("vert"); annulerScan();
-  } catch(e) { afficherAlerte("alerte-scan", "Erreur : " + e.message, "erreur"); flashEcran("rouge"); }
-  enRegistrement = false; bc.disabled = be.disabled = false;
-  bc.textContent = "Confirmer ✓"; be.textContent = "Déclarer échec ✗";
-  return;
-}
-  // AJOUT : cas microbouturage — créer N lignes
+      actions.push(["AddRecord", "Suivi2", null, {
+        CodeIntro: accessionCourante.id, Methode: session.methode, Etape: session.etape,
+        Date: timestamp, Operateur: session.operateur, Emplacement: session.emplacement,
+        CodePartenaire: session.codePartenaire, NumMeristeme: numMG,
+        ...(commentaire ? { Commentaires: commentaire } : {})
+      }]);
+    }
+    try {
+      const result = await grist.docApi.applyUserActions(actions);
+      result.retValues.forEach((gristId, i) => {
+        const numMG = "M" + String(depart + i).padStart(2, "0");
+        cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, numMeristeme: numMG, nbMeristemes: null, date: timestamp });
+      });
+      scansSession.push({ code: accessionCourante.code, nom: `${accessionCourante.nomIntro} (${nb} microgreffes)`, ok: true, echec: false, gristId: result.retValues[0], multi: true });
+      mettreAJourCompteur(); flashEcran("vert"); annulerScan();
+    } catch(e) { afficherAlerte("alerte-scan", "Erreur : " + e.message, "erreur"); flashEcran("rouge"); }
+    enRegistrement = false; bc.disabled = be.disabled = false;
+    bc.textContent = "Confirmer ✓"; be.textContent = "Déclarer échec ✗";
+    return;
+  }
+
+  // ── Cas microbouturage — créer N lignes ──
   if (etapeCode === ETAPE_OPTIONNELLE) {
     const mgParente = document.getElementById("sel-mg-bouturage").value;
     const nb = parseInt(document.getElementById("mb-nb").value);
@@ -583,14 +607,13 @@ async function enregistrerScan(reussite) {
     return;
   }
 
-  // Cas standard — une ligne
+  // ── Cas standard — une ligne ──
   enRegistrement = true;
   const bc = document.getElementById("btn-confirmer"), be = document.getElementById("btn-echec");
   bc.disabled = be.disabled = true;
   if (reussite) be.innerHTML = 'Enregistrement <span class="spinner"></span>';
   else bc.innerHTML = 'Enregistrement <span class="spinner"></span>';
 
-  // AJOUT : récupérer la microgreffe/microbouture sélectionnée
   let numMeristeme = null;
   if (ETAPES_POST_MG.includes(etapeCode) && etapeCode !== ETAPE_OPTIONNELLE) {
     if (etapeCode === ETAPE_TRANSMISSION) {
