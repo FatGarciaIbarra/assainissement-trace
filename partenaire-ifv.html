@@ -216,16 +216,13 @@ const PARTENAIRE_CONFIG = {
 //  ▲▲▲ FIN DE LA PARTIE À MODIFIER ▲▲▲
 // ════════════════════════════════════════════════
 
-// Séquence stricte de base (avant le cycle) — chacune une fois, dans l'ordre
 const SEQUENCE_BASE = ["RECEPTION","TEC_VIROSEES","C_BOUTURAGE"];
-// Étapes du cycle libre plante mère (peuvent alterner librement une fois Bouturage fait)
 const ETAPES_CYCLE = ["C_CONTENEUR","C_TABLARD","C_THERMOTHERAPIE"];
 
 const ETAPE_MICROGREFFAGE = "C_MICROGREFFAGE";
 const ETAPE_OPTIONNELLE   = "C_MICROBOUTURAGE";
 const ETAPE_CONTROLE      = "C_CONTROLE";
 const ETAPE_TRANSMISSION  = "F_TRANSMISSION_INRAE";
-// Séquence suivie par microgreffe individuelle (après prélèvement)
 const SEQUENCE_IFV   = ["C_MICROGREFFAGE","C_CONTROLE","C_MICROBOUTURAGE","F_TRANSMISSION_INRAE"];
 const ETAPES_POST_MG = ["C_CONTROLE","C_MICROBOUTURAGE","F_TRANSMISSION_INRAE"];
 const SEUIL_MICROGREFFES  = 8;
@@ -302,7 +299,6 @@ function filtrerEtapesConfig() {
 function codeEtapeParId(id) { const e = cacheEtapes.find(e => e.id === id); return e ? e.code : null; }
 function nomEtapeParId(id)  { const e = cacheEtapes.find(e => e.id === id); return e ? e.nom : null; }
 
-// Microgreffes existantes pour une accession
 function getMicrogreffes(accId) {
   return [...new Set(cacheSuivi
     .filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) === ETAPE_MICROGREFFAGE && r.numMeristeme)
@@ -310,14 +306,19 @@ function getMicrogreffes(accId) {
 }
 
 // ── Validation de l'étape pour la PLANTE MÈRE (accession) ──
-// Réception → TEC → Bouturage (strict, une fois chacune)
-// puis cycle libre Conteneur/Tablard/Thermothérapie (répétable, dans n'importe quel ordre)
-// puis Microgreffage (nécessite un passage par Thermothérapie, répétable ensuite)
 function validerEtapePlanteMere(accId, etapeCode) {
   const historique = cacheSuivi
     .filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) !== null);
 
   const codesHistorique = historique.map(r => codeEtapeParId(r.etapeId));
+
+  // ── Vérification : répétition dans LA MÊME SESSION (bloquant) ──
+  const dejaScanneeDansSession = scansSession.some(s =>
+    s.ok && s.accId === accId && s.etapeCode === etapeCode
+  );
+  if (dejaScanneeDansSession) {
+    return { bloquant: true, message: `Cette accession a déjà été enregistrée à cette étape dans la session en cours.` };
+  }
 
   // ── Cas 1 : séquence de base stricte ──
   const idxBase = SEQUENCE_BASE.indexOf(etapeCode);
@@ -327,7 +328,6 @@ function validerEtapePlanteMere(accId, etapeCode) {
         ? { bloquant: true, message: "Accession non encore réceptionnée." }
         : null;
     }
-    // Étape de base la PLUS AVANCÉE jamais atteinte (pas la plus récente)
     const indicesBaseAtteints = codesHistorique
       .map(c => SEQUENCE_BASE.indexOf(c))
       .filter(i => i !== -1);
@@ -335,7 +335,7 @@ function validerEtapePlanteMere(accId, etapeCode) {
     const derniereBase = idxDerniereBase !== -1 ? SEQUENCE_BASE[idxDerniereBase] : null;
 
     if (idxBase <= idxDerniereBase)
-      return { bloquant: true, message: `Étape déjà enregistrée. Dernière étape : ${derniereBase}.` };
+      return { bloquant: false, message: `⚠️ Étape déjà enregistrée. Dernière étape : ${derniereBase}.` };
     if (idxBase > idxDerniereBase + 1)
       return { bloquant: false, message: `⚠️ Étape inattendue. Étape attendue : ${SEQUENCE_BASE[idxDerniereBase + 1]}.` };
     return null;
@@ -346,6 +346,13 @@ function validerEtapePlanteMere(accId, etapeCode) {
     const aFaitBouturage = codesHistorique.includes("C_BOUTURAGE");
     if (!aFaitBouturage)
       return { bloquant: true, message: "L'accession doit d'abord passer par le Bouturage." };
+
+    const derniereEtape = historique.length > 0
+      ? [...historique].sort((a,b) => b.date - a.date || b.id - a.id)[0]
+      : null;
+    if (derniereEtape && codeEtapeParId(derniereEtape.etapeId) === etapeCode) {
+      return { bloquant: false, message: `⚠️ Cette étape (${etapeCode}) vient d'être enregistrée pour cette accession.` };
+    }
     if (etapeCode === "C_CONTENEUR") {
       const dejaDansTablardOuThermo = codesHistorique.some(c => c === "C_TABLARD" || c === "C_THERMOTHERAPIE");
       if (dejaDansTablardOuThermo)
@@ -362,12 +369,11 @@ function validerEtapePlanteMere(accId, etapeCode) {
     return null;
   }
 
-
   // ── Cas 4 : étapes suivies par microgreffe — pas de validation au niveau accession ──
   return null;
 }
 
-// ── Validation par MICROGREFFE individuelle (Contrôle, Microbouturage, Transmission) ──
+// ── Validation par MICROGREFFE individuelle ──
 function validerSequenceParMG(accId, etapeCode, numMG) {
   const historiqueMG = cacheSuivi
     .filter(r => r.codeIntroId === accId && r.numMeristeme === numMG && codeEtapeParId(r.etapeId) !== null)
@@ -385,7 +391,6 @@ function validerSequenceParMG(accId, etapeCode, numMG) {
   return null;
 }
 
-// Alerte conformité
 function alerteConformite(accId) {
   const historique = cacheSuivi.filter(r => r.codeIntroId === accId);
   const controle = historique.find(r => codeEtapeParId(r.etapeId) === ETAPE_CONTROLE);
@@ -396,7 +401,6 @@ function alerteConformite(accId) {
   return null;
 }
 
-// Afficher les bons blocs selon l'étape
 function afficherBlocsEtape(etapeCode, accId) {
   document.getElementById("bloc-microgreffage").style.display  = "none";
   document.getElementById("bloc-select-mg").style.display      = "none";
@@ -471,7 +475,6 @@ async function demarrerSession() {
   document.getElementById("badge-etape").textContent = etapeNom;
   document.getElementById("badge-info").textContent = `${PARTENAIRE_CONFIG.nom} · ${methode} · ${opNom} · ${emplacement}`;
   document.getElementById("badge-compteur").textContent = "0 scan";
-  // Recharger Suivi2 frais à chaque session
   try {
     const suivi = await grist.docApi.fetchTable("Suivi2");
     cacheSuivi = suivi.id.map((id, i) => ({
@@ -539,7 +542,7 @@ async function enregistrerScan(reussite) {
   if (!accessionCourante || enRegistrement) return;
   const etapeCode = codeEtapeParId(session.etape);
 
-  // ── Cas microgreffage — créer N lignes, en continuant la numérotation existante ──
+  // ── Cas microgreffage ──
   if (etapeCode === ETAPE_MICROGREFFAGE) {
     const nb = parseInt(document.getElementById("mg-nb").value);
     if (!nb || nb < 1) return afficherAlerte("alerte-scan", "Indiquer le nombre de microgreffes.", "erreur");
@@ -570,7 +573,7 @@ async function enregistrerScan(reussite) {
         const numMG = "M" + String(depart + i).padStart(2, "0");
         cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, numMeristeme: numMG, nbMeristemes: null, date: timestamp });
       });
-      scansSession.push({ code: accessionCourante.code, nom: `${accessionCourante.nomIntro} (${nb} microgreffes)`, ok: true, echec: false, gristId: result.retValues[0], multi: true });
+      scansSession.push({ code: accessionCourante.code, nom: `${accessionCourante.nomIntro} (${nb} microgreffes)`, ok: true, echec: false, gristId: result.retValues[0], multi: true, accId: accessionCourante.id, etapeCode: etapeCode });
       mettreAJourCompteur(); flashEcran("vert"); annulerScan();
     } catch(e) { afficherAlerte("alerte-scan", "Erreur : " + e.message, "erreur"); flashEcran("rouge"); }
     enRegistrement = false; bc.disabled = be.disabled = false;
@@ -578,7 +581,7 @@ async function enregistrerScan(reussite) {
     return;
   }
 
-  // ── Cas microbouturage — créer N lignes ──
+  // ── Cas microbouturage ──
   if (etapeCode === ETAPE_OPTIONNELLE) {
     const mgParente = document.getElementById("sel-mg-bouturage").value;
     const nb = parseInt(document.getElementById("mb-nb").value);
@@ -604,7 +607,7 @@ async function enregistrerScan(reussite) {
       result.retValues.forEach((gristId, i) => {
         cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, numMeristeme: mgParente + "-MB" + String(mbExistantes+i+1).padStart(2,"0"), nbMeristemes: null, date: timestamp });
       });
-      scansSession.push({ code: accessionCourante.code, nom: `${accessionCourante.nomIntro} — ${mgParente} (${nb} microboutures)`, ok: true, echec: false, gristId: result.retValues[0], multi: true });
+      scansSession.push({ code: accessionCourante.code, nom: `${accessionCourante.nomIntro} — ${mgParente} (${nb} microboutures)`, ok: true, echec: false, gristId: result.retValues[0], multi: true, accId: accessionCourante.id, etapeCode: etapeCode });
       mettreAJourCompteur(); flashEcran("vert"); annulerScan();
     } catch(e) { afficherAlerte("alerte-scan", "Erreur : " + e.message, "erreur"); flashEcran("rouge"); }
     enRegistrement = false; bc.disabled = be.disabled = false;
@@ -612,7 +615,7 @@ async function enregistrerScan(reussite) {
     return;
   }
 
-  // ── Cas standard — une ligne ──
+  // ── Cas standard ──
   enRegistrement = true;
   const bc = document.getElementById("btn-confirmer"), be = document.getElementById("btn-echec");
   bc.disabled = be.disabled = true;
@@ -649,7 +652,7 @@ async function enregistrerScan(reussite) {
     cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, numMeristeme, nbMeristemes, date: timestamp });
     const estEchec = reussite === "Échec";
     const label = numMeristeme ? `${accessionCourante.code} — ${numMeristeme}` : accessionCourante.code;
-    scansSession.push({ code: label, nom: accessionCourante.nomIntro, ok: true, echec: estEchec, gristId });
+    scansSession.push({ code: label, nom: accessionCourante.nomIntro, ok: true, echec: estEchec, gristId, accId: accessionCourante.id, etapeCode: etapeCode });
     mettreAJourCompteur(); flashEcran(estEchec ? "rouge" : "vert"); annulerScan();
   } catch(e) {
     scansSession.push({ code: accessionCourante.code, nom: accessionCourante.nomIntro, ok: false, echec: false });
