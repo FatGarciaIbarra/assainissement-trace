@@ -315,8 +315,7 @@ function getMicrogreffes(accId) {
 // puis Microgreffage (nécessite un passage par Thermothérapie, répétable ensuite)
 function validerEtapePlanteMere(accId, etapeCode) {
   const historique = cacheSuivi
-    .filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) !== null)
-    .sort((a,b) => b.date - a.date || b.id - a.id);
+    .filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) !== null);
 
   const codesHistorique = historique.map(r => codeEtapeParId(r.etapeId));
 
@@ -328,10 +327,15 @@ function validerEtapePlanteMere(accId, etapeCode) {
         ? { bloquant: true, message: "Accession non encore réceptionnée." }
         : null;
     }
-    const derniereBase = codesHistorique.find(c => SEQUENCE_BASE.includes(c));
-    const idxDerniereBase = derniereBase ? SEQUENCE_BASE.indexOf(derniereBase) : -1;
+    // Étape de base la PLUS AVANCÉE jamais atteinte (pas la plus récente)
+    const indicesBaseAtteints = codesHistorique
+      .map(c => SEQUENCE_BASE.indexOf(c))
+      .filter(i => i !== -1);
+    const idxDerniereBase = indicesBaseAtteints.length > 0 ? Math.max(...indicesBaseAtteints) : -1;
+    const derniereBase = idxDerniereBase !== -1 ? SEQUENCE_BASE[idxDerniereBase] : null;
+
     if (idxBase <= idxDerniereBase)
-      return { bloquant: false, message: `⚠️ Étape déjà enregistrée. Dernière étape : ${derniereBase}.` };
+      return { bloquant: true, message: `Étape déjà enregistrée. Dernière étape : ${derniereBase}.` };
     if (idxBase > idxDerniereBase + 1)
       return { bloquant: false, message: `⚠️ Étape inattendue. Étape attendue : ${SEQUENCE_BASE[idxDerniereBase + 1]}.` };
     return null;
@@ -347,7 +351,7 @@ function validerEtapePlanteMere(accId, etapeCode) {
       if (dejaDansTablardOuThermo)
         return { bloquant: false, message: "⚠️ Retour en Mise en conteneur après Tablard/Thermothérapie — inhabituel mais autorisé." };
     }
-    return null; // libre dans le cycle
+    return null;
   }
 
   // ── Cas 3 : microgreffage ──
@@ -355,8 +359,9 @@ function validerEtapePlanteMere(accId, etapeCode) {
     const aPasseThermo = codesHistorique.includes("C_THERMOTHERAPIE");
     if (!aPasseThermo)
       return { bloquant: true, message: "L'accession doit être passée par la Thermothérapie avant le microgreffage." };
-    return null; // répétable librement ensuite
+    return null;
   }
+
 
   // ── Cas 4 : étapes suivies par microgreffe — pas de validation au niveau accession ──
   return null;
