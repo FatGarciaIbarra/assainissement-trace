@@ -334,8 +334,11 @@ function validerEtapePlanteMere(accId, etapeCode) {
     const idxDerniereBase = indicesBaseAtteints.length > 0 ? Math.max(...indicesBaseAtteints) : -1;
     const derniereBase = idxDerniereBase !== -1 ? SEQUENCE_BASE[idxDerniereBase] : null;
 
-    if (idxBase <= idxDerniereBase)
-      return { bloquant: false, message: `⚠️ Étape déjà enregistrée. Dernière étape : ${derniereBase}.` };
+    if (idxBase <= idxDerniereBase) {
+      const vraieDerniere = [...historique].sort((a,b) => b.date - a.date || b.id - a.id)[0];
+      const vraieDerniereCode = vraieDerniere ? codeEtapeParId(vraieDerniere.etapeId) : derniereBase;
+      return { bloquant: false, message: `⚠️ Étape déjà enregistrée. Dernière étape enregistrée : ${vraieDerniereCode}.` };
+    }
     if (idxBase > idxDerniereBase + 1)
       return { bloquant: false, message: `⚠️ Étape inattendue. Étape attendue : ${SEQUENCE_BASE[idxDerniereBase + 1]}.` };
     return null;
@@ -347,12 +350,10 @@ function validerEtapePlanteMere(accId, etapeCode) {
     if (!aFaitBouturage)
       return { bloquant: true, message: "L'accession doit d'abord passer par le Bouturage." };
 
-    const derniereEtape = historique.length > 0
-      ? [...historique].sort((a,b) => b.date - a.date || b.id - a.id)[0]
-      : null;
-    if (derniereEtape && codeEtapeParId(derniereEtape.etapeId) === etapeCode) {
+    const derniereEtape = [...historique].sort((a,b) => b.date - a.date || b.id - a.id)[0];
+    if (derniereEtape && codeEtapeParId(derniereEtape.etapeId) === etapeCode)
       return { bloquant: false, message: `⚠️ Cette étape (${etapeCode}) vient d'être enregistrée pour cette accession.` };
-    }
+
     if (etapeCode === "C_CONTENEUR") {
       const dejaDansTablardOuThermo = codesHistorique.some(c => c === "C_TABLARD" || c === "C_THERMOTHERAPIE");
       if (dejaDansTablardOuThermo)
