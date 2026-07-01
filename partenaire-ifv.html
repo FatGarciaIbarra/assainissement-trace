@@ -350,9 +350,9 @@ function validerEtapePlanteMere(accId, etapeCode) {
     if (!aFaitBouturage)
       return { bloquant: true, message: "L'accession doit d'abord passer par le Bouturage." };
 
-    const derniereEtape = [...historique].sort((a,b) => b.date - a.date || b.id - a.id)[0];
-    if (derniereEtape && codeEtapeParId(derniereEtape.etapeId) === etapeCode)
-      return { bloquant: false, message: `⚠️ Cette étape (${etapeCode}) vient d'être enregistrée pour cette accession.` };
+    const dejaFaite = codesHistorique.includes(etapeCode);
+if (dejaFaite)
+  return { bloquant: false, message: `⚠️ Cette étape a déjà été enregistrée pour cette accession. Dernière étape : ${codeEtapeParId([...historique].sort((a,b) => b.date - a.date || b.id - a.id)[0]?.etapeId)}.` };
 
     if (etapeCode === "C_CONTENEUR") {
       const dejaDansTablardOuThermo = codesHistorique.some(c => c === "C_TABLARD" || c === "C_THERMOTHERAPIE");
