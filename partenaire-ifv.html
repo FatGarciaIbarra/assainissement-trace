@@ -158,15 +158,14 @@ textarea { resize: vertical; min-height: 60px; }
 
           <div class="champs-acc" id="champs-communs">
             <div class="champs-acc-titre">Données complémentaires</div>
-            <div class="champ"><label>Nb méristèmes / plants conformes</label><input type="number" id="scan-nbMeristemes" min="0" placeholder="—"></div>
             <div class="champ"><label>Commentaire</label><textarea id="scan-commentaire" placeholder="Observation…"></textarea></div>
           </div>
 
-          <div class="btns-scan">
-            <button class="btn btn-secondaire" onclick="annulerScan()">✕</button>
-            <button class="btn btn-danger" id="btn-echec" onclick="enregistrerScan('Échec')">Déclarer échec ✗</button>
-            <button class="btn btn-principal" id="btn-confirmer" onclick="enregistrerScan(null)">Confirmer ✓</button>
-          </div>
+          <div class="btns-scan" id="btns-scan">
+  <button class="btn btn-secondaire" onclick="annulerScan()">✕</button>
+  <button class="btn btn-danger" id="btn-echec" onclick="enregistrerScan('Non conforme')">Non conforme ✗</button>
+  <button class="btn btn-principal" id="btn-confirmer" onclick="enregistrerScan(null)">Conforme ✓</button>
+</div>
         </div>
       </div>
     </div>
@@ -502,15 +501,18 @@ function afficherBlocsEtapeComposite(etapeCode, numMeristeme) {
   // Afficher le numéro de microgreffe sélectionné
   const titreBloc = document.querySelector("#champs-communs .champs-acc-titre");
   if (titreBloc) titreBloc.textContent = `Données — ${numMeristeme}`;
+
+// Adapter les boutons selon l'étape
+  if (etapeCode === ETAPE_CONTROLE) {
+    document.getElementById("btn-confirmer").textContent = "Conforme ✓";
+    document.getElementById("btn-echec").textContent = "Non conforme ✗";
+    document.getElementById("btn-echec").onclick = () => enregistrerScan("Non conforme");
+  } else {
+    document.getElementById("btn-confirmer").textContent = "Confirmer ✓";
+    document.getElementById("btn-echec").textContent = "Déclarer échec ✗";
+    document.getElementById("btn-echec").onclick = () => enregistrerScan("Échec");
+  }
 }
-
-function rechercherAccession() {
-  const input = document.getElementById("scan-code").value.trim().toUpperCase();
-  masquerAlerte("alerte-scan");
-  if (!input) return;
-
-  const etapeCode = codeEtapeParId(session.etape);
-
   // ── Détection code composite (microgreffe ou microbouture) ──
   // Format : CODEACCESSION-M01 ou CODEACCESSION-M01-MB01
   const partiesMG = input.match(/^(.+)-(M\d+)$/);
