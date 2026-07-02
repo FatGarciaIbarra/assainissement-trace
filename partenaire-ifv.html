@@ -513,6 +513,14 @@ function afficherBlocsEtapeComposite(etapeCode, numMeristeme) {
     document.getElementById("btn-echec").onclick = () => enregistrerScan("Échec");
   }
 }
+
+  function rechercherAccession() {
+  const input = document.getElementById("scan-code").value.trim().toUpperCase();
+  masquerAlerte("alerte-scan");
+  if (!input) return;
+
+  const etapeCode = codeEtapeParId(session.etape);
+
   // ── Détection code composite (microgreffe ou microbouture) ──
   // Format : CODEACCESSION-M01 ou CODEACCESSION-M01-MB01
   const partiesMG = input.match(/^(.+)-(M\d+)$/);
@@ -530,7 +538,6 @@ function afficherBlocsEtapeComposite(etapeCode, numMeristeme) {
     document.getElementById("scan-nomIntro").textContent = acc.nomIntro;
     document.getElementById("scan-nomVar").textContent = acc.nomVar;
     document.getElementById("scan-info-bloc").style.display = "block";
-    document.getElementById("scan-nbMeristemes").value = "";
     document.getElementById("scan-commentaire").value = "";
     afficherBlocsEtapeComposite(etapeCode, numMG + "-" + numMB);
     setTimeout(() => document.getElementById("btn-confirmer").focus(), 50);
@@ -550,7 +557,6 @@ function afficherBlocsEtapeComposite(etapeCode, numMeristeme) {
     document.getElementById("scan-nomIntro").textContent = acc.nomIntro;
     document.getElementById("scan-nomVar").textContent = acc.nomVar;
     document.getElementById("scan-info-bloc").style.display = "block";
-    document.getElementById("scan-nbMeristemes").value = "";
     document.getElementById("scan-commentaire").value = "";
     afficherBlocsEtapeComposite(etapeCode, numMG);
     setTimeout(() => document.getElementById("btn-confirmer").focus(), 50);
@@ -569,7 +575,6 @@ function afficherBlocsEtapeComposite(etapeCode, numMeristeme) {
     document.getElementById("scan-nomIntro").textContent = acc.nomIntro;
     document.getElementById("scan-nomVar").textContent = acc.nomVar;
     document.getElementById("scan-info-bloc").style.display = "block";
-    document.getElementById("scan-nbMeristemes").value = "";
     document.getElementById("scan-commentaire").value = "";
     afficherBlocsEtape(etapeCode, acc.id);
     const alerteConf = alerteConformite(acc.id);
