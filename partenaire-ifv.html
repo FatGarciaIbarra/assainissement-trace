@@ -493,41 +493,90 @@ async function demarrerSession() {
   setTimeout(() => ni.focus(), 100);
 }
 
-function rechercherAccession() {
-  const code = document.getElementById("scan-code").value.trim().toUpperCase();
-  masquerAlerte("alerte-scan");
-  if (!code) return;
-  const acc = cacheAccessions[code];
-  if (acc) {
-    const etapeCode = codeEtapeParId(session.etape);
-    const erreurSeq = validerEtapePlanteMere(acc.id, etapeCode);
-    if (erreurSeq) {
-      if (erreurSeq.bloquant) {
-        afficherAlerte("alerte-scan", erreurSeq.message, "erreur");
-        flashEcran("rouge");
-        return;
-      } else {
-        afficherAlerte("alerte-scan", erreurSeq.message, "info");
-      }
-    }
+function afficherBlocsEtapeComposite(etapeCode, numMeristeme) {
+  document.getElementById("bloc-microgreffage").style.display  = "none";
+  document.getElementById("bloc-select-mg").style.display      = "none";
+  document.getElementById("bloc-microbouturage").style.display = "none";
+  document.getElementById("bloc-select-mb").style.display      = "none";
+  document.getElementById("champs-communs").style.display      = "block";
+  // Afficher le numéro de microgreffe sélectionné
+  const titreBloc = document.querySelector("#champs-communs .champs-acc-titre");
+  if (titreBloc) titreBloc.textContent = `Données — ${numMeristeme}`;
+}
 
-    accessionCourante = { code, ...acc };
+function rechercherAccession() {
+  const input = document.getElementById("scan-code").value.trim().toUpperCase();
+  masquerAlerte("alerte-scan");
+  if (!input) return;
+
+  const etapeCode = codeEtapeParId(session.etape);
+
+  // ── Détection code composite (microgreffe ou microbouture) ──
+  // Format : CODEACCESSION-M01 ou CODEACCESSION-M01-MB01
+  const partiesMG = input.match(/^(.+)-(M\d+)$/);
+  const partiesMB = input.match(/^(.+)-(M\d+)-(MB\d+)$/);
+
+  if (partiesMB && ETAPES_POST_MG.includes(etapeCode)) {
+    const codeAcc = partiesMB[1];
+    const numMG   = partiesMB[2];
+    const numMB   = partiesMB[3];
+    const acc = cacheAccessions[codeAcc];
+    if (!acc) { afficherAlerte("alerte-scan", `Accession "${codeAcc}" introuvable.`, "erreur"); flashEcran("rouge"); return; }
+    const mgExiste = cacheSuivi.some(r => r.codeIntroId === acc.id && codeEtapeParId(r.etapeId) === ETAPE_MICROGREFFAGE && r.numMeristeme === numMG);
+    if (!mgExiste) { afficherAlerte("alerte-scan", `Microgreffe "${numMG}" introuvable pour cette accession.`, "erreur"); flashEcran("rouge"); return; }
+    accessionCourante = { code: codeAcc, ...acc, numMeristeme: numMG + "-" + numMB };
     document.getElementById("scan-nomIntro").textContent = acc.nomIntro;
     document.getElementById("scan-nomVar").textContent = acc.nomVar;
     document.getElementById("scan-info-bloc").style.display = "block";
     document.getElementById("scan-nbMeristemes").value = "";
     document.getElementById("scan-commentaire").value = "";
+    afficherBlocsEtapeComposite(etapeCode, numMG + "-" + numMB);
+    setTimeout(() => document.getElementById("btn-confirmer").focus(), 50);
+    return;
+  }
 
+  if (partiesMG && ETAPES_POST_MG.includes(etapeCode)) {
+    const codeAcc = partiesMG[1];
+    const numMG   = partiesMG[2];
+    const acc = cacheAccessions[codeAcc];
+    if (!acc) { afficherAlerte("alerte-scan", `Accession "${codeAcc}" introuvable.`, "erreur"); flashEcran("rouge"); return; }
+    const mgExiste = cacheSuivi.some(r => r.codeIntroId === acc.id && codeEtapeParId(r.etapeId) === ETAPE_MICROGREFFAGE && r.numMeristeme === numMG);
+    if (!mgExiste) { afficherAlerte("alerte-scan", `Microgreffe "${numMG}" introuvable pour cette accession.`, "erreur"); flashEcran("rouge"); return; }
+    const erreur = validerSequenceParMG(acc.id, etapeCode, numMG);
+    if (erreur) afficherAlerte("alerte-scan", erreur, "info");
+    accessionCourante = { code: codeAcc, ...acc, numMeristeme: numMG };
+    document.getElementById("scan-nomIntro").textContent = acc.nomIntro;
+    document.getElementById("scan-nomVar").textContent = acc.nomVar;
+    document.getElementById("scan-info-bloc").style.display = "block";
+    document.getElementById("scan-nbMeristemes").value = "";
+    document.getElementById("scan-commentaire").value = "";
+    afficherBlocsEtapeComposite(etapeCode, numMG);
+    setTimeout(() => document.getElementById("btn-confirmer").focus(), 50);
+    return;
+  }
+
+  // ── Code simple (accession) ──
+  const acc = cacheAccessions[input];
+  if (acc) {
+    const erreurSeq = validerEtapePlanteMere(acc.id, etapeCode);
+    if (erreurSeq) {
+      if (erreurSeq.bloquant) { afficherAlerte("alerte-scan", erreurSeq.message, "erreur"); flashEcran("rouge"); return; }
+      else afficherAlerte("alerte-scan", erreurSeq.message, "info");
+    }
+    accessionCourante = { code: input, ...acc, numMeristeme: null };
+    document.getElementById("scan-nomIntro").textContent = acc.nomIntro;
+    document.getElementById("scan-nomVar").textContent = acc.nomVar;
+    document.getElementById("scan-info-bloc").style.display = "block";
+    document.getElementById("scan-nbMeristemes").value = "";
+    document.getElementById("scan-commentaire").value = "";
     afficherBlocsEtape(etapeCode, acc.id);
-
     const alerteConf = alerteConformite(acc.id);
     if (alerteConf) afficherAlerte("alerte-scan", alerteConf, "info");
-
     setTimeout(() => document.getElementById("btn-confirmer").focus(), 50);
   } else {
     accessionCourante = null;
     document.getElementById("scan-info-bloc").style.display = "none";
-    if (code.length > 2) { afficherAlerte("alerte-scan", `Code "${code}" introuvable.`, "erreur"); flashEcran("rouge"); }
+    if (input.length > 2) { afficherAlerte("alerte-scan", `Code "${input}" introuvable.`, "erreur"); flashEcran("rouge"); }
   }
 }
 
@@ -624,7 +673,11 @@ async function enregistrerScan(reussite) {
   else bc.innerHTML = 'Enregistrement <span class="spinner"></span>';
 
   let numMeristeme = null;
-  if (ETAPES_POST_MG.includes(etapeCode) && etapeCode !== ETAPE_OPTIONNELLE) {
+  if (accessionCourante.numMeristeme) {
+    // Code composite scanné directement (ex: 0Mtp1106-M01)
+    numMeristeme = accessionCourante.numMeristeme;
+  } else if (ETAPES_POST_MG.includes(etapeCode) && etapeCode !== ETAPE_OPTIONNELLE) {
+    // Sélection via liste déroulante (fallback)
     if (etapeCode === ETAPE_TRANSMISSION) {
       const mg = document.getElementById("sel-mg-transmission").value;
       const mb = document.getElementById("sel-microbouture").value;
