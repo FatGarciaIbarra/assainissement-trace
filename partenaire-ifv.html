@@ -566,6 +566,12 @@ function afficherBlocsEtapeComposite(etapeCode, numMeristeme) {
   // ── Code simple (accession) ──
   const acc = cacheAccessions[input];
   if (acc) {
+    const etapeCode = codeEtapeParId(session.etape);
+    // Si étape post-microgreffage, on n'accepte que les codes composites
+    if (ETAPES_POST_MG.includes(etapeCode)) {
+      afficherAlerte("alerte-scan", "⚠️ Veuillez scanner le code de la microgreffe (ex: " + input + "-M01).", "info");
+      return;
+    }    
     const erreurSeq = validerEtapePlanteMere(acc.id, etapeCode);
     if (erreurSeq) {
       if (erreurSeq.bloquant) { afficherAlerte("alerte-scan", erreurSeq.message, "erreur"); flashEcran("rouge"); return; }
