@@ -514,7 +514,7 @@ function afficherBlocsEtapeComposite(etapeCode, numMeristeme) {
   }
 }
 
-  function rechercherAccession() {
+function rechercherAccession() {
   const input = document.getElementById("scan-code").value.trim().toUpperCase();
   masquerAlerte("alerte-scan");
   if (!input) return;
@@ -700,7 +700,6 @@ async function enregistrerScan(reussite) {
     }
   }
 
-  const nbMeristemes = parseInt(document.getElementById("scan-nbMeristemes").value) || null;
   const commentaire  = document.getElementById("scan-commentaire").value;
   const timestamp    = Math.floor(new Date(session.date).getTime() / 1000);
   const fields = {
@@ -710,7 +709,6 @@ async function enregistrerScan(reussite) {
   };
   if (reussite)     fields.Reussite     = reussite;
   if (commentaire)  fields.Commentaires = commentaire;
-  if (nbMeristemes) fields.NbMeristemes = nbMeristemes;
   if (numMeristeme) fields.NumMeristeme = numMeristeme;
 
   try {
