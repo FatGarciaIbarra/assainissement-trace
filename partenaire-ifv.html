@@ -207,7 +207,6 @@ const PARTENAIRE_CONFIG = {
   champs: {
     milieu:       { visible: false, requis: false },
     nbApex:       { visible: false, requis: false },
-    nbMeristemes: { visible: true,  requis: false },
     commentaire:  { visible: true,  requis: false }
   }
 };
@@ -281,7 +280,6 @@ async function chargerDonnees() {
       codeIntroId:   suivi.CodeIntro[i],
       etapeId:       suivi.Etape[i],
       numMeristeme:  suivi.NumMeristeme ? suivi.NumMeristeme[i] : null,
-      nbMeristemes:  suivi.NbMeristemes ? suivi.NbMeristemes[i] : null,
       date:          suivi.Date[i]
     }));
   } catch(e) { afficherAlerte("alerte-config", "Erreur de chargement : " + e.message, "erreur"); }
@@ -393,11 +391,11 @@ function validerSequenceParMG(accId, etapeCode, numMG) {
 
 function alerteConformite(accId) {
   const historique = cacheSuivi.filter(r => r.codeIntroId === accId);
-  const controle = historique.find(r => codeEtapeParId(r.etapeId) === ETAPE_CONTROLE);
-  if (!controle || controle.nbMeristemes === null) return null;
-  const nb = controle.nbMeristemes;
-  if (nb < SEUIL_MICROGREFFES && !historique.some(r => codeEtapeParId(r.etapeId) === ETAPE_OPTIONNELLE))
-    return `⚠️ ${nb} plant(s) conforme(s) au contrôle (seuil : ${SEUIL_MICROGREFFES}). Microbouturage recommandé.`;
+  const aControle = historique.some(r => codeEtapeParId(r.etapeId) === ETAPE_CONTROLE);
+  if (!aControle) return null;
+  const aMicrobouturage = historique.some(r => codeEtapeParId(r.etapeId) === ETAPE_OPTIONNELLE);
+  if (!aMicrobouturage)
+    return `⚠️ Contrôle enregistré sans microbouturage. Vérifier si microbouturage nécessaire.`;
   return null;
 }
 
@@ -505,10 +503,12 @@ function afficherBlocsEtapeComposite(etapeCode, numMeristeme) {
 // Adapter les boutons selon l'étape
   if (etapeCode === ETAPE_CONTROLE) {
     document.getElementById("btn-confirmer").textContent = "Conforme ✓";
+    document.getElementById("btn-confirmer").onclick = () => enregistrerScan("Conforme");
     document.getElementById("btn-echec").textContent = "Non conforme ✗";
     document.getElementById("btn-echec").onclick = () => enregistrerScan("Non conforme");
   } else {
     document.getElementById("btn-confirmer").textContent = "Confirmer ✓";
+    document.getElementById("btn-confirmer").onclick = () => enregistrerScan(null);
     document.getElementById("btn-echec").textContent = "Déclarer échec ✗";
     document.getElementById("btn-echec").onclick = () => enregistrerScan("Échec");
   }
@@ -634,7 +634,7 @@ async function enregistrerScan(reussite) {
       const result = await grist.docApi.applyUserActions(actions);
       result.retValues.forEach((gristId, i) => {
         const numMG = "M" + String(depart + i).padStart(2, "0");
-        cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, numMeristeme: numMG, nbMeristemes: null, date: timestamp });
+        cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, numMeristeme: numMG, date: timestamp });
       });
       scansSession.push({ code: accessionCourante.code, nom: `${accessionCourante.nomIntro} (${nb} microgreffes)`, ok: true, echec: false, gristId: result.retValues[0], multi: true, accId: accessionCourante.id, etapeCode: etapeCode });
       mettreAJourCompteur(); flashEcran("vert"); annulerScan();
@@ -668,7 +668,7 @@ async function enregistrerScan(reussite) {
     try {
       const result = await grist.docApi.applyUserActions(actions);
       result.retValues.forEach((gristId, i) => {
-        cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, numMeristeme: mgParente + "-MB" + String(mbExistantes+i+1).padStart(2,"0"), nbMeristemes: null, date: timestamp });
+        cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, numMeristeme: mgParente + "-MB" + String(mbExistantes+i+1).padStart(2,"0"), date: timestamp });
       });
       scansSession.push({ code: accessionCourante.code, nom: `${accessionCourante.nomIntro} — ${mgParente} (${nb} microboutures)`, ok: true, echec: false, gristId: result.retValues[0], multi: true, accId: accessionCourante.id, etapeCode: etapeCode });
       mettreAJourCompteur(); flashEcran("vert"); annulerScan();
@@ -714,7 +714,7 @@ async function enregistrerScan(reussite) {
   try {
     const result = await grist.docApi.applyUserActions([["AddRecord", "Suivi2", null, fields]]);
     const gristId = result.retValues[0];
-    cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, numMeristeme, nbMeristemes, date: timestamp });
+    cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, numMeristeme, date: timestamp });
     const estEchec = reussite === "Échec";
     const label = numMeristeme ? `${accessionCourante.code} — ${numMeristeme}` : accessionCourante.code;
     scansSession.push({ code: label, nom: accessionCourante.nomIntro, ok: true, echec: estEchec, gristId, accId: accessionCourante.id, etapeCode: etapeCode });
@@ -773,4 +773,4 @@ function afficherAlerte(id, msg, type) { const el=document.getElementById(id); e
 function masquerAlerte(id) { const el=document.getElementById(id); el.className="alerte"; el.textContent=""; }
 </script>
 </body>
-</html> 
+</html>
