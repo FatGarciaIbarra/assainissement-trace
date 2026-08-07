@@ -383,9 +383,10 @@ function validerSequenceParMG(accId, etapeCode, numMG) {
   const idxDerniere = SEQUENCE_IFV.indexOf(derniereEtapeCode);
   const idxCible = SEQUENCE_IFV.indexOf(etapeCode);
 
-  if (idxCible <= idxDerniere)
+  if (idxCible <= idxDerniere) {
     const derniereEtapeNom = nomEtapeParId(historiqueMG[0].etapeId) || derniereEtapeCode;
-return `⚠️ Cette microgreffe a déjà passé cette étape. Dernière étape : ${derniereEtapeNom}.`;
+    return `⚠️ Cette microgreffe a déjà passé cette étape. Dernière étape : ${derniereEtapeNom}.`;
+}
 
   return null;
 }
