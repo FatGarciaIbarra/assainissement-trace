@@ -384,7 +384,8 @@ function validerSequenceParMG(accId, etapeCode, numMG) {
   const idxCible = SEQUENCE_IFV.indexOf(etapeCode);
 
   if (idxCible <= idxDerniere)
-    return `⚠️ Ce microgreffe a déjà passé cette étape. Dernière étape : ${derniereEtapeCode}.`;
+    const derniereEtapeNom = nomEtapeParId(historiqueMG[0].etapeId) || derniereEtapeCode;
+return `⚠️ Cette microgreffe a déjà passé cette étape. Dernière étape : ${derniereEtapeNom}.`;
 
   return null;
 }
@@ -501,11 +502,21 @@ function afficherBlocsEtapeComposite(etapeCode, numMeristeme) {
   if (titreBloc) titreBloc.textContent = `Données — ${numMeristeme}`;
 
 // Adapter les boutons selon l'étape
+  // Adapter les boutons selon l'étape
   if (etapeCode === ETAPE_CONTROLE) {
     document.getElementById("btn-confirmer").textContent = "Conforme ✓";
     document.getElementById("btn-confirmer").onclick = () => enregistrerScan("Conforme");
     document.getElementById("btn-echec").textContent = "Non conforme ✗";
     document.getElementById("btn-echec").onclick = () => enregistrerScan("Non conforme");
+  } else if (etapeCode === ETAPE_OPTIONNELLE) {
+    document.getElementById("bloc-microbouturage").style.display = "block";
+    document.getElementById("sel-mg-bouturage").style.display = "none";
+    document.getElementById("mb-nb").value = "";
+    document.getElementById("champs-communs").style.display = "none";
+    document.getElementById("btn-confirmer").textContent = "Confirmer ✓";
+    document.getElementById("btn-confirmer").onclick = () => enregistrerScan(null);
+    document.getElementById("btn-echec").textContent = "Déclarer échec ✗";
+    document.getElementById("btn-echec").onclick = () => enregistrerScan("Échec");
   } else {
     document.getElementById("btn-confirmer").textContent = "Confirmer ✓";
     document.getElementById("btn-confirmer").onclick = () => enregistrerScan(null);
@@ -645,8 +656,8 @@ async function enregistrerScan(reussite) {
   }
 
   // ── Cas microbouturage ──
-  if (etapeCode === ETAPE_OPTIONNELLE) {
-    const mgParente = document.getElementById("sel-mg-bouturage").value;
+    // Si code composite scanné, la microgreffe parente est déjà connue
+    const mgParente = accessionCourante.numMeristeme || document.getElementById("sel-mg-bouturage").value;
     const nb = parseInt(document.getElementById("mb-nb").value);
     if (!mgParente) return afficherAlerte("alerte-scan", "Choisir la microgreffe parente.", "erreur");
     if (!nb || nb < 1) return afficherAlerte("alerte-scan", "Indiquer le nombre de microboutures.", "erreur");
