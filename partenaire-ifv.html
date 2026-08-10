@@ -188,7 +188,7 @@ textarea { resize: vertical; min-height: 60px; }
 
 <script>
 // ════════════════════════════════════════════════
-//  ▼▼▼ SEULE PARTIE  À MODIFIER PAR PARTENAIRE ▼▼▼
+//  ▼▼▼ SEULE PARTIE À MODIFIER PAR PARTENAIRE ▼▼▼
 // ════════════════════════════════════════════════
 const PARTENAIRE_CONFIG = {
   code: "IFV",
@@ -656,10 +656,10 @@ async function enregistrerScan(reussite) {
     return;
   }
 
-  // ── Cas microbouturage ──
+// ── Cas microbouturage ──
+  if (etapeCode === ETAPE_OPTIONNELLE) {
     // Si code composite scanné, la microgreffe parente est déjà connue
     const mgParente = accessionCourante.numMeristeme || document.getElementById("sel-mg-bouturage").value;
-    const nb = parseInt(document.getElementById("mb-nb").value);
     if (!mgParente) return afficherAlerte("alerte-scan", "Choisir la microgreffe parente.", "erreur");
     if (!nb || nb < 1) return afficherAlerte("alerte-scan", "Indiquer le nombre de microboutures.", "erreur");
     enRegistrement = true;
