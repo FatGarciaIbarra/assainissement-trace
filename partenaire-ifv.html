@@ -410,6 +410,11 @@ function afficherBlocsEtape(etapeCode, accId) {
   document.getElementById("bloc-select-mb").style.display      = "none";
   document.getElementById("champs-communs").style.display      = "block";
 
+document.getElementById("btn-confirmer").textContent = "Confirmer ✓";
+  document.getElementById("btn-confirmer").onclick = () => enregistrerScan(null);
+  document.getElementById("btn-echec").textContent = "Déclarer échec ✗";
+  document.getElementById("btn-echec").onclick = () => enregistrerScan("Échec");
+
   if (etapeCode === ETAPE_MICROGREFFAGE) {
     document.getElementById("bloc-microgreffage").style.display = "block";
     document.getElementById("champs-communs").style.display = "none";
