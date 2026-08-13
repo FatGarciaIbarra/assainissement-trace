@@ -1,3 +1,5 @@
+
+Partenaire ifv · TXT
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -90,7 +92,7 @@ textarea { resize: vertical; min-height: 60px; }
 <div class="flash-overlay" id="flash"></div>
 <div class="container">
   <div id="ecran-chargement" class="chargement">Connexion à Grist <span class="spinner"></span></div>
-
+ 
   <!-- ══ ÉCRAN CONFIG ══ -->
   <div class="ecran" id="ecran-config">
     <div id="alerte-config" class="alerte"></div>
@@ -111,7 +113,7 @@ textarea { resize: vertical; min-height: 60px; }
     </div>
     <div class="btns"><button class="btn btn-principal" onclick="demarrerSession()">Démarrer la session →</button></div>
   </div>
-
+ 
   <!-- ══ ÉCRAN SCAN ══ -->
   <div class="ecran" id="ecran-scan">
     <div class="session-badge">
@@ -128,39 +130,39 @@ textarea { resize: vertical; min-height: 60px; }
             <div class="info-item"><div class="info-label">Nom intro</div><div class="info-valeur" id="scan-nomIntro">—</div></div>
             <div class="info-item"><div class="info-label">Nom variété</div><div class="info-valeur" id="scan-nomVar">—</div></div>
           </div>
-
+ 
           <!-- Bloc microgreffage -->
           <div class="champs-acc" id="bloc-microgreffage" style="display:none">
             <div class="champs-acc-titre">Microgreffage — nouveaux greffons</div>
             <div class="champ"><label>Nombre de microgreffes réalisées <span class="requis">*</span></label><input type="number" id="mg-nb" min="1" max="50" placeholder="Ex : 8"></div>
             <div class="champ"><label>Commentaire</label><textarea id="mg-commentaire" placeholder="Observation…"></textarea></div>
           </div>
-
+ 
           <!-- Bloc sélection microgreffe -->
           <div class="champs-acc" id="bloc-select-mg" style="display:none">
             <div class="champs-acc-titre">Sélectionner la microgreffe</div>
             <div class="champ"><label>Microgreffe <span class="requis">*</span></label><select id="sel-microgreffe"><option value="">— Choisir —</option></select></div>
           </div>
-
+ 
           <!-- Bloc microbouturage -->
           <div class="champs-acc" id="bloc-microbouturage" style="display:none">
             <div class="champs-acc-titre">Microbouturage</div>
             <div class="champ"><label>Microgreffe parente <span class="requis">*</span></label><select id="sel-mg-bouturage"><option value="">— Choisir —</option></select></div>
             <div class="champ"><label>Nombre de microboutures <span class="requis">*</span></label><input type="number" id="mb-nb" min="1" max="50" placeholder="Ex : 3"></div>
           </div>
-
+ 
           <!-- Bloc transmission avec sélection MG/MB -->
           <div class="champs-acc" id="bloc-select-mb" style="display:none">
             <div class="champs-acc-titre">Sélectionner la microgreffe / microbouture</div>
             <div class="champ"><label>Microgreffe <span class="requis">*</span></label><select id="sel-mg-transmission"><option value="">— Choisir —</option></select></div>
             <div class="champ" id="champ-sel-mb" style="display:none"><label>Microbouture</label><select id="sel-microbouture"><option value="">— Non applicable —</option></select></div>
           </div>
-
+ 
           <div class="champs-acc" id="champs-communs">
             <div class="champs-acc-titre">Données complémentaires</div>
             <div class="champ"><label>Commentaire</label><textarea id="scan-commentaire" placeholder="Observation…"></textarea></div>
           </div>
-
+ 
           <div class="btns-scan" id="btns-scan">
   <button class="btn btn-secondaire" onclick="annulerScan()">✕</button>
   <button class="btn btn-danger" id="btn-echec" onclick="enregistrerScan('Non conforme')">Non conforme ✗</button>
@@ -175,7 +177,7 @@ textarea { resize: vertical; min-height: 60px; }
     </div>
     <div class="btns"><button class="btn btn-secondaire" onclick="terminerSession()">Terminer la session</button></div>
   </div>
-
+ 
   <!-- ══ ÉCRAN FIN ══ -->
   <div class="ecran" id="ecran-fin">
     <div class="section">
@@ -185,7 +187,7 @@ textarea { resize: vertical; min-height: 60px; }
     <div class="btns"><button class="btn btn-principal" onclick="nouvelleSession()">Nouvelle session</button></div>
   </div>
 </div>
-
+ 
 <script>
 // ════════════════════════════════════════════════
 //  ▼▼▼ SEULE PARTIE À MODIFIER PAR PARTENAIRE ▼▼▼
@@ -213,10 +215,10 @@ const PARTENAIRE_CONFIG = {
 // ════════════════════════════════════════════════
 //  ▲▲▲ FIN DE LA PARTIE À MODIFIER ▲▲▲
 // ════════════════════════════════════════════════
-
+ 
 const SEQUENCE_BASE = ["RECEPTION","TEC_VIROSEES","C_BOUTURAGE"];
 const ETAPES_CYCLE = ["C_CONTENEUR","C_TABLARD","C_THERMOTHERAPIE"];
-
+ 
 const ETAPE_MICROGREFFAGE = "C_MICROGREFFAGE";
 const ETAPE_OPTIONNELLE   = "C_MICROBOUTURAGE";
 const ETAPE_CONTROLE      = "C_CONTROLE";
@@ -225,13 +227,13 @@ const SEQUENCE_IFV   = ["C_MICROGREFFAGE","C_CONTROLE","C_MICROBOUTURAGE","F_TRA
 const ETAPES_POST_MG = ["C_CONTROLE","C_MICROBOUTURAGE","F_TRANSMISSION_INRAE"];
 const SEUIL_MICROGREFFES  = 8;
 const ETAPE_STOCKAGE = "STOCKAGE";
-
+ 
 let cacheAccessions = {}, cacheOperateurs = [], cacheEtapes = [];
 let cacheSuivi = [];
 let session = {}, scansSession = [], accessionCourante = null, enRegistrement = false;
-
+ 
 grist.ready({ requiredAccess: "full" });
-
+ 
 async function init() {
   appliquerConfig();
   await chargerDonnees();
@@ -241,14 +243,14 @@ async function init() {
   document.getElementById("cfg-methode").addEventListener("change", filtrerEtapesConfig);
 }
 window.addEventListener("load", init);
-
+ 
 function appliquerConfig() {
   document.getElementById("partenaire-tag").textContent = PARTENAIRE_CONFIG.nom;
   document.title = "Saisie — " + PARTENAIRE_CONFIG.nom;
 }
-
+ 
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
-
+ 
 async function chargerDonnees() {
   try {
     const [ops, etapes, accs] = await Promise.all([
@@ -260,11 +262,11 @@ async function chargerDonnees() {
     const selOp = document.getElementById("cfg-operateur");
     selOp.innerHTML = '<option value="">— Choisir —</option>';
     cacheOperateurs.forEach(op => selOp.innerHTML += `<option value="${op.id}">${op.nom}</option>`);
-
+ 
     const exclus = PARTENAIRE_CONFIG.etapesExclues || [];
     cacheEtapes = etapes.id.map((id, i) => ({ id, code: etapes.CodeEtape[i], nom: etapes.NomEtape[i], methode: etapes.Methode[i], ordre: etapes.OrdreAffichage[i] }))
       .filter(e => !exclus.includes(e.code)).sort((a,b) => a.ordre - b.ordre);
-
+ 
     const mc = PARTENAIRE_CONFIG.methodes || [];
     const toutes = [...new Set(cacheEtapes.filter(e => e.methode !== "Commune").map(e => e.methode))];
     const dispo = mc.length > 0 ? toutes.filter(m => mc.includes(m)) : toutes;
@@ -272,20 +274,20 @@ async function chargerDonnees() {
     selM.innerHTML = '<option value="">— Choisir —</option>';
     dispo.forEach(m => selM.innerHTML += `<option value="${m}">${m}</option>`);
     if (PARTENAIRE_CONFIG.methodeImposee && dispo.length === 1) { selM.value = dispo[0]; selM.disabled = true; filtrerEtapesConfig(); }
-
+ 
     accs.id.forEach((id, i) => { const c = accs.CodeIntro[i]; if (c) cacheAccessions[c.toUpperCase()] = { id, nomIntro: accs.NomIntro[i] || "—", nomVar: accs.NomVar[i] || "—" }; });
-
+ 
     const suivi = await grist.docApi.fetchTable("Suivi2");
     cacheSuivi = suivi.id.map((id, i) => ({
       id,
       codeIntroId:   suivi.CodeIntro[i],
       etapeId:       suivi.Etape[i],
-      numMeristeme:  suivi.NumMeristeme ? suivi.NumMeristeme[i] : null,
+      codeMicrogreffe:  suivi.CodeMicrogreffe ? suivi.CodeMicrogreffe[i] : null,
       date:          suivi.Date[i]
     }));
   } catch(e) { afficherAlerte("alerte-config", "Erreur de chargement : " + e.message, "erreur"); }
 }
-
+ 
 function filtrerEtapesConfig() {
   const m = document.getElementById("cfg-methode").value;
   const sel = document.getElementById("cfg-etape");
@@ -293,24 +295,24 @@ function filtrerEtapesConfig() {
   if (!m) return;
   cacheEtapes.filter(e => e.methode === m || e.methode === "Commune").forEach(e => sel.innerHTML += `<option value="${e.id}">${e.nom}</option>`);
 }
-
+ 
 function codeEtapeParId(id) { const e = cacheEtapes.find(e => e.id === id); return e ? e.code : null; }
 function nomEtapeParId(id)  { const e = cacheEtapes.find(e => e.id === id); return e ? e.nom : null; }
-
+ 
 function getMicrogreffes(accId) {
   return [...new Set(cacheSuivi
-    .filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) === ETAPE_MICROGREFFAGE && r.numMeristeme)
-    .map(r => r.numMeristeme))].sort();
+    .filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) === ETAPE_MICROGREFFAGE && r.codeMicrogreffe)
+    .map(r => r.codeMicrogreffe))].sort();
 }
-
+ 
 // ── Validation de l'étape pour la PLANTE MÈRE (accession) ──
 function validerEtapePlanteMere(accId, etapeCode) {
   if (etapeCode === ETAPE_STOCKAGE) return null;
   const historique = cacheSuivi
     .filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) !== null);
-
+ 
   const codesHistorique = historique.map(r => codeEtapeParId(r.etapeId));
-
+ 
   // ── Vérification : répétition dans LA MÊME SESSION (bloquant) ──
   const dejaScanneeDansSession = scansSession.some(s =>
     s.ok && s.accId === accId && s.etapeCode === etapeCode
@@ -318,7 +320,7 @@ function validerEtapePlanteMere(accId, etapeCode) {
   if (dejaScanneeDansSession) {
     return { bloquant: true, message: `Cette accession a déjà été enregistrée à cette étape dans la session en cours.` };
   }
-
+ 
   // ── Cas 1 : séquence de base stricte ──
   const idxBase = SEQUENCE_BASE.indexOf(etapeCode);
   if (idxBase !== -1) {
@@ -332,7 +334,7 @@ function validerEtapePlanteMere(accId, etapeCode) {
       .filter(i => i !== -1);
     const idxDerniereBase = indicesBaseAtteints.length > 0 ? Math.max(...indicesBaseAtteints) : -1;
     const derniereBase = idxDerniereBase !== -1 ? SEQUENCE_BASE[idxDerniereBase] : null;
-
+ 
     if (idxBase <= idxDerniereBase) {
       const vraieDerniere = [...historique].sort((a,b) => b.date - a.date || b.id - a.id)[0];
       const vraieDerniereCode = vraieDerniere ? codeEtapeParId(vraieDerniere.etapeId) : derniereBase;
@@ -342,17 +344,17 @@ function validerEtapePlanteMere(accId, etapeCode) {
       return { bloquant: false, message: `⚠️ Étape inattendue. Étape attendue : ${SEQUENCE_BASE[idxDerniereBase + 1]}.` };
     return null;
   }
-
+ 
   // ── Cas 2 : cycle libre Conteneur/Tablard/Thermothérapie ──
   if (ETAPES_CYCLE.includes(etapeCode)) {
     const aFaitBouturage = codesHistorique.includes("C_BOUTURAGE");
     if (!aFaitBouturage)
       return { bloquant: true, message: "L'accession doit d'abord passer par le Bouturage." };
-
+ 
     const dejaFaite = codesHistorique.includes(etapeCode);
 if (dejaFaite)
   return { bloquant: false, message: `⚠️ Cette étape a déjà été enregistrée pour cette accession. Dernière étape : ${codeEtapeParId([...historique].sort((a,b) => b.date - a.date || b.id - a.id)[0]?.etapeId)}.` };
-
+ 
     if (etapeCode === "C_CONTENEUR") {
       const dejaDansTablardOuThermo = codesHistorique.some(c => c === "C_TABLARD" || c === "C_THERMOTHERAPIE");
       if (dejaDansTablardOuThermo)
@@ -360,7 +362,7 @@ if (dejaFaite)
     }
     return null;
   }
-
+ 
   // ── Cas 3 : microgreffage ──
   if (etapeCode === ETAPE_MICROGREFFAGE) {
     const aPasseThermo = codesHistorique.includes("C_THERMOTHERAPIE");
@@ -368,31 +370,31 @@ if (dejaFaite)
       return { bloquant: true, message: "L'accession doit être passée par la Thermothérapie avant le microgreffage." };
     return null;
   }
-
+ 
   // ── Cas 4 : étapes suivies par microgreffe — pas de validation au niveau accession ──
   return null;
 }
-
+ 
 // ── Validation par MICROGREFFE individuelle ──
 function validerSequenceParMG(accId, etapeCode, numMG) {
   const historiqueMG = cacheSuivi
-    .filter(r => r.codeIntroId === accId && r.numMeristeme === numMG && codeEtapeParId(r.etapeId) !== null)
+    .filter(r => r.codeIntroId === accId && r.codeMicrogreffe === numMG && codeEtapeParId(r.etapeId) !== null)
     .sort((a,b) => b.date - a.date || b.id - a.id);
-
+ 
   if (historiqueMG.length === 0) return null;
-
+ 
   const derniereEtapeCode = codeEtapeParId(historiqueMG[0].etapeId);
   const idxDerniere = SEQUENCE_IFV.indexOf(derniereEtapeCode);
   const idxCible = SEQUENCE_IFV.indexOf(etapeCode);
-
+ 
   if (idxCible <= idxDerniere) {
     const derniereEtapeNom = nomEtapeParId(historiqueMG[0].etapeId) || derniereEtapeCode;
     return `⚠️ Cette microgreffe a déjà passé cette étape. Dernière étape : ${derniereEtapeNom}.`;
 }
-
+ 
   return null;
 }
-
+ 
 function alerteConformite(accId) {
   const historique = cacheSuivi.filter(r => r.codeIntroId === accId);
   const aControle = historique.some(r => codeEtapeParId(r.etapeId) === ETAPE_CONTROLE);
@@ -402,25 +404,25 @@ function alerteConformite(accId) {
     return `⚠️ Contrôle enregistré sans microbouturage. Vérifier si microbouturage nécessaire.`;
   return null;
 }
-
+ 
 function afficherBlocsEtape(etapeCode, accId) {
   document.getElementById("bloc-microgreffage").style.display  = "none";
   document.getElementById("bloc-select-mg").style.display      = "none";
   document.getElementById("bloc-microbouturage").style.display = "none";
   document.getElementById("bloc-select-mb").style.display      = "none";
   document.getElementById("champs-communs").style.display      = "block";
-
+ 
 document.getElementById("btn-confirmer").textContent = "Confirmer ✓";
   document.getElementById("btn-confirmer").onclick = () => enregistrerScan(null);
   document.getElementById("btn-echec").textContent = "Déclarer échec ✗";
   document.getElementById("btn-echec").onclick = () => enregistrerScan("Échec");
-
+ 
   if (etapeCode === ETAPE_MICROGREFFAGE) {
     document.getElementById("bloc-microgreffage").style.display = "block";
     document.getElementById("champs-communs").style.display = "none";
     document.getElementById("mg-nb").value = "";
     document.getElementById("mg-commentaire").value = "";
-
+ 
   } else if (etapeCode === ETAPE_OPTIONNELLE) {
     document.getElementById("bloc-microbouturage").style.display = "block";
     const mgs = getMicrogreffes(accId);
@@ -428,7 +430,7 @@ document.getElementById("btn-confirmer").textContent = "Confirmer ✓";
     sel.innerHTML = '<option value="">— Choisir —</option>';
     mgs.forEach(mg => sel.innerHTML += `<option value="${mg}">${mg}</option>`);
     document.getElementById("mb-nb").value = "";
-
+ 
   } else if (ETAPES_POST_MG.includes(etapeCode) && etapeCode !== ETAPE_TRANSMISSION) {
     document.getElementById("bloc-select-mg").style.display = "block";
     const mgs = getMicrogreffes(accId);
@@ -441,7 +443,7 @@ document.getElementById("btn-confirmer").textContent = "Confirmer ✓";
       if (erreur) afficherAlerte("alerte-scan", erreur, "info");
       else masquerAlerte("alerte-scan");
     };
-
+ 
   } else if (etapeCode === ETAPE_TRANSMISSION) {
     document.getElementById("bloc-select-mb").style.display = "block";
     const mgs = getMicrogreffes(accId);
@@ -450,18 +452,18 @@ document.getElementById("btn-confirmer").textContent = "Confirmer ✓";
     mgs.forEach(mg => selMG.innerHTML += `<option value="${mg}">${mg}</option>`);
     selMG.onchange = () => {
       const mg = selMG.value;
-      const mbs = cacheSuivi.filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) === ETAPE_OPTIONNELLE && r.numMeristeme?.startsWith(mg + "-MB"));
+      const mbs = cacheSuivi.filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) === ETAPE_OPTIONNELLE && r.codeMicrogreffe?.startsWith(mg + "-MB"));
       const champMB = document.getElementById("champ-sel-mb");
       const selMB = document.getElementById("sel-microbouture");
       if (mbs.length > 0) {
         champMB.style.display = "block";
         selMB.innerHTML = '<option value="">— Non applicable —</option>';
-        mbs.forEach(r => selMB.innerHTML += `<option value="${r.numMeristeme}">${r.numMeristeme}</option>`);
+        mbs.forEach(r => selMB.innerHTML += `<option value="${r.codeMicrogreffe}">${r.codeMicrogreffe}</option>`);
       } else { champMB.style.display = "none"; }
     };
   }
 }
-
+ 
 async function demarrerSession() {
   masquerAlerte("alerte-config");
   const date = document.getElementById("cfg-date").value;
@@ -486,7 +488,7 @@ async function demarrerSession() {
     const suivi = await grist.docApi.fetchTable("Suivi2");
     cacheSuivi = suivi.id.map((id, i) => ({
       id, codeIntroId: suivi.CodeIntro[i], etapeId: suivi.Etape[i],
-      numMeristeme: suivi.NumMeristeme ? suivi.NumMeristeme[i] : null,
+      codeMicrogreffe: suivi.CodeMicrogreffe ? suivi.CodeMicrogreffe[i] : null,
       date: suivi.Date[i]
     }));
   } catch(e) { console.warn("Impossible de recharger Suivi2 :", e); }
@@ -497,8 +499,8 @@ async function demarrerSession() {
   ni.addEventListener("input", debounce(e => { if (e.target.value.trim().length > 2) rechercherAccession(); }, 350));
   setTimeout(() => ni.focus(), 100);
 }
-
-function afficherBlocsEtapeComposite(etapeCode, numMeristeme) {
+ 
+function afficherBlocsEtapeComposite(etapeCode, codeMicrogreffe) {
   document.getElementById("bloc-microgreffage").style.display  = "none";
   document.getElementById("bloc-select-mg").style.display      = "none";
   document.getElementById("bloc-microbouturage").style.display = "none";
@@ -506,8 +508,8 @@ function afficherBlocsEtapeComposite(etapeCode, numMeristeme) {
   document.getElementById("champs-communs").style.display      = "block";
   // Afficher le numéro de microgreffe sélectionné
   const titreBloc = document.querySelector("#champs-communs .champs-acc-titre");
-  if (titreBloc) titreBloc.textContent = `Données — ${numMeristeme}`;
-
+  if (titreBloc) titreBloc.textContent = `Données — ${codeMicrogreffe}`;
+ 
 // Adapter les boutons selon l'étape
   // Adapter les boutons selon l'étape
   if (etapeCode === ETAPE_CONTROLE) {
@@ -531,28 +533,28 @@ function afficherBlocsEtapeComposite(etapeCode, numMeristeme) {
     document.getElementById("btn-echec").onclick = () => enregistrerScan("Échec");
   }
 }
-
+ 
 function rechercherAccession() {
   const input = document.getElementById("scan-code").value.trim().toUpperCase();
   masquerAlerte("alerte-scan");
   if (!input) return;
-
+ 
   const etapeCode = codeEtapeParId(session.etape);
-
+ 
   // ── Détection code composite (microgreffe ou microbouture) ──
   // Format : CODEACCESSION-M01 ou CODEACCESSION-M01-MB01
   const partiesMG = input.match(/^(.+)-(M\d+)$/);
   const partiesMB = input.match(/^(.+)-(M\d+)-(MB\d+)$/);
-
+ 
   if (partiesMB && (ETAPES_POST_MG.includes(etapeCode) || etapeCode === ETAPE_STOCKAGE)) {
     const codeAcc = partiesMB[1];
     const numMG   = partiesMB[2];
     const numMB   = partiesMB[3];
     const acc = cacheAccessions[codeAcc];
     if (!acc) { afficherAlerte("alerte-scan", `Accession "${codeAcc}" introuvable.`, "erreur"); flashEcran("rouge"); return; }
-    const mgExiste = cacheSuivi.some(r => r.codeIntroId === acc.id && codeEtapeParId(r.etapeId) === ETAPE_MICROGREFFAGE && r.numMeristeme === numMG);
+    const mgExiste = cacheSuivi.some(r => r.codeIntroId === acc.id && codeEtapeParId(r.etapeId) === ETAPE_MICROGREFFAGE && r.codeMicrogreffe === numMG);
     if (!mgExiste) { afficherAlerte("alerte-scan", `Microgreffe "${numMG}" introuvable pour cette accession.`, "erreur"); flashEcran("rouge"); return; }
-    accessionCourante = { code: codeAcc, ...acc, numMeristeme: numMG + "-" + numMB };
+    accessionCourante = { code: codeAcc, ...acc, codeMicrogreffe: numMG + "-" + numMB };
     document.getElementById("scan-nomIntro").textContent = acc.nomIntro;
     document.getElementById("scan-nomVar").textContent = acc.nomVar;
     document.getElementById("scan-info-bloc").style.display = "block";
@@ -561,19 +563,19 @@ function rechercherAccession() {
     setTimeout(() => document.getElementById("btn-confirmer").focus(), 50);
     return;
   }
-
+ 
   if (partiesMG && (ETAPES_POST_MG.includes(etapeCode) || etapeCode === ETAPE_STOCKAGE)) {
     const codeAcc = partiesMG[1];
     const numMG   = partiesMG[2];
     const acc = cacheAccessions[codeAcc];
     if (!acc) { afficherAlerte("alerte-scan", `Accession "${codeAcc}" introuvable.`, "erreur"); flashEcran("rouge"); return; }
-    const mgExiste = cacheSuivi.some(r => r.codeIntroId === acc.id && codeEtapeParId(r.etapeId) === ETAPE_MICROGREFFAGE && r.numMeristeme === numMG);
+    const mgExiste = cacheSuivi.some(r => r.codeIntroId === acc.id && codeEtapeParId(r.etapeId) === ETAPE_MICROGREFFAGE && r.codeMicrogreffe === numMG);
     if (!mgExiste) { afficherAlerte("alerte-scan", `Microgreffe "${numMG}" introuvable pour cette accession.`, "erreur"); flashEcran("rouge"); return; }
     if (etapeCode !== ETAPE_STOCKAGE) {
   const erreur = validerSequenceParMG(acc.id, etapeCode, numMG);
   if (erreur) afficherAlerte("alerte-scan", erreur, "info");
 }
-    accessionCourante = { code: codeAcc, ...acc, numMeristeme: numMG };
+    accessionCourante = { code: codeAcc, ...acc, codeMicrogreffe: numMG };
     document.getElementById("scan-nomIntro").textContent = acc.nomIntro;
     document.getElementById("scan-nomVar").textContent = acc.nomVar;
     document.getElementById("scan-info-bloc").style.display = "block";
@@ -582,7 +584,7 @@ function rechercherAccession() {
     setTimeout(() => document.getElementById("btn-confirmer").focus(), 50);
     return;
   }
-
+ 
   // ── Code simple (accession) ──
   const acc = cacheAccessions[input];
   if (acc) {
@@ -591,13 +593,13 @@ function rechercherAccession() {
     if (ETAPES_POST_MG.includes(etapeCode)) {
       afficherAlerte("alerte-scan", "⚠️ Veuillez scanner le code de la microgreffe (ex: " + input + "-M01).", "info");
       return;
-    }    
+    }
     const erreurSeq = validerEtapePlanteMere(acc.id, etapeCode);
     if (erreurSeq) {
       if (erreurSeq.bloquant) { afficherAlerte("alerte-scan", erreurSeq.message, "erreur"); flashEcran("rouge"); return; }
       else afficherAlerte("alerte-scan", erreurSeq.message, "info");
     }
-    accessionCourante = { code: input, ...acc, numMeristeme: null };
+    accessionCourante = { code: input, ...acc, codeMicrogreffe: null };
     document.getElementById("scan-nomIntro").textContent = acc.nomIntro;
     document.getElementById("scan-nomVar").textContent = acc.nomVar;
     document.getElementById("scan-info-bloc").style.display = "block";
@@ -612,7 +614,7 @@ function rechercherAccession() {
     if (input.length > 2) { afficherAlerte("alerte-scan", `Code "${input}" introuvable.`, "erreur"); flashEcran("rouge"); }
   }
 }
-
+ 
 function annulerScan() {
   accessionCourante = null;
   document.getElementById("scan-code").value = "";
@@ -620,11 +622,11 @@ function annulerScan() {
   masquerAlerte("alerte-scan");
   document.getElementById("scan-code").focus();
 }
-
+ 
 async function enregistrerScan(reussite) {
   if (!accessionCourante || enRegistrement) return;
   const etapeCode = codeEtapeParId(session.etape);
-
+ 
   // ── Cas microgreffage ──
   if (etapeCode === ETAPE_MICROGREFFAGE) {
     const nb = parseInt(document.getElementById("mg-nb").value);
@@ -635,18 +637,18 @@ async function enregistrerScan(reussite) {
     bc.innerHTML = 'Enregistrement <span class="spinner"></span>';
     const commentaire = document.getElementById("mg-commentaire").value;
     const timestamp = Math.floor(new Date(session.date).getTime() / 1000);
-
+ 
     const existants = getMicrogreffes(accessionCourante.id);
     const numerosExistants = existants.map(m => parseInt(m.replace("M",""))).filter(n => !isNaN(n));
     const depart = numerosExistants.length > 0 ? Math.max(...numerosExistants) + 1 : 1;
-
+ 
     const actions = [];
     for (let i = 0; i < nb; i++) {
       const numMG = "M" + String(depart + i).padStart(2, "0");
       actions.push(["AddRecord", "Suivi2", null, {
         CodeIntro: accessionCourante.id, Methode: session.methode, Etape: session.etape,
         Date: timestamp, Operateur: session.operateur, Emplacement: session.emplacement,
-        CodePartenaire: session.codePartenaire, NumMeristeme: numMG,
+        CodePartenaire: session.codePartenaire, CodeMicrogreffe: numMG,
         ...(commentaire ? { Commentaires: commentaire } : {})
       }]);
     }
@@ -654,7 +656,7 @@ async function enregistrerScan(reussite) {
       const result = await grist.docApi.applyUserActions(actions);
       result.retValues.forEach((gristId, i) => {
         const numMG = "M" + String(depart + i).padStart(2, "0");
-        cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, numMeristeme: numMG, date: timestamp });
+        cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, codeMicrogreffe: numMG, date: timestamp });
       });
       scansSession.push({ code: accessionCourante.code, nom: `${accessionCourante.nomIntro} (${nb} microgreffes)`, ok: true, echec: false, gristId: result.retValues[0], multi: true, accId: accessionCourante.id, etapeCode: etapeCode });
       mettreAJourCompteur(); flashEcran("vert"); annulerScan();
@@ -663,10 +665,10 @@ async function enregistrerScan(reussite) {
     bc.textContent = "Confirmer ✓"; be.textContent = "Déclarer échec ✗";
     return;
   }
-
+ 
 // ── Cas microbouturage ──
   if (etapeCode === ETAPE_OPTIONNELLE) {
-    const mgParente = accessionCourante.numMeristeme || document.getElementById("sel-mg-bouturage").value;
+    const mgParente = accessionCourante.codeMicrogreffe || document.getElementById("sel-mg-bouturage").value;
     const nb = parseInt(document.getElementById("mb-nb").value);
     if (!mgParente) return afficherAlerte("alerte-scan", "Choisir la microgreffe parente.", "erreur");
     if (!nb || nb < 1) return afficherAlerte("alerte-scan", "Indiquer le nombre de microboutures.", "erreur");
@@ -675,20 +677,20 @@ async function enregistrerScan(reussite) {
     bc.disabled = be.disabled = true;
     bc.innerHTML = 'Enregistrement <span class="spinner"></span>';
     const timestamp = Math.floor(new Date(session.date).getTime() / 1000);
-    const mbExistantes = cacheSuivi.filter(r => r.codeIntroId === accessionCourante.id && codeEtapeParId(r.etapeId) === ETAPE_OPTIONNELLE && r.numMeristeme?.startsWith(mgParente + "-MB")).length;
+    const mbExistantes = cacheSuivi.filter(r => r.codeIntroId === accessionCourante.id && codeEtapeParId(r.etapeId) === ETAPE_OPTIONNELLE && r.codeMicrogreffe?.startsWith(mgParente + "-MB")).length;
     const actions = [];
     for (let i = 1; i <= nb; i++) {
       actions.push(["AddRecord", "Suivi2", null, {
         CodeIntro: accessionCourante.id, Methode: session.methode, Etape: session.etape,
         Date: timestamp, Operateur: session.operateur, Emplacement: session.emplacement,
         CodePartenaire: session.codePartenaire,
-        NumMeristeme: mgParente + "-MB" + String(mbExistantes + i).padStart(2, "0")
+        CodeMicrogreffe: mgParente + "-MB" + String(mbExistantes + i).padStart(2, "0")
       }]);
     }
     try {
       const result = await grist.docApi.applyUserActions(actions);
       result.retValues.forEach((gristId, i) => {
-        cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, numMeristeme: mgParente + "-MB" + String(mbExistantes+i+1).padStart(2,"0"), date: timestamp });
+        cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, codeMicrogreffe: mgParente + "-MB" + String(mbExistantes+i+1).padStart(2,"0"), date: timestamp });
       });
       scansSession.push({ code: accessionCourante.code, nom: `${accessionCourante.nomIntro} — ${mgParente} (${nb} microboutures)`, ok: true, echec: false, gristId: result.retValues[0], multi: true, accId: accessionCourante.id, etapeCode: etapeCode });
       mettreAJourCompteur(); flashEcran("vert"); annulerScan();
@@ -697,29 +699,29 @@ async function enregistrerScan(reussite) {
     bc.textContent = "Confirmer ✓"; be.textContent = "Déclarer échec ✗";
     return;
   }
-
+ 
   // ── Cas standard ──
   enRegistrement = true;
   const bc = document.getElementById("btn-confirmer"), be = document.getElementById("btn-echec");
   bc.disabled = be.disabled = true;
   if (reussite) be.innerHTML = 'Enregistrement <span class="spinner"></span>';
   else bc.innerHTML = 'Enregistrement <span class="spinner"></span>';
-
-  let numMeristeme = null;
-  if (accessionCourante.numMeristeme) {
+ 
+  let codeMicrogreffe = null;
+  if (accessionCourante.codeMicrogreffe) {
     // Code composite scanné directement (ex: 0Mtp1106-M01)
-    numMeristeme = accessionCourante.numMeristeme;
+    codeMicrogreffe = accessionCourante.codeMicrogreffe;
   } else if (ETAPES_POST_MG.includes(etapeCode) && etapeCode !== ETAPE_OPTIONNELLE) {
     // Sélection via liste déroulante (fallback)
     if (etapeCode === ETAPE_TRANSMISSION) {
       const mg = document.getElementById("sel-mg-transmission").value;
       const mb = document.getElementById("sel-microbouture").value;
-      numMeristeme = mb || mg || null;
+      codeMicrogreffe = mb || mg || null;
     } else {
-      numMeristeme = document.getElementById("sel-microgreffe").value || null;
+      codeMicrogreffe = document.getElementById("sel-microgreffe").value || null;
     }
   }
-
+ 
   const commentaire  = document.getElementById("scan-commentaire").value;
   const timestamp    = Math.floor(new Date(session.date).getTime() / 1000);
   const fields = {
@@ -729,14 +731,14 @@ async function enregistrerScan(reussite) {
   };
   if (reussite)     fields.Reussite     = reussite;
   if (commentaire)  fields.Commentaires = commentaire;
-  if (numMeristeme) fields.NumMeristeme = numMeristeme;
-
+  if (codeMicrogreffe) fields.CodeMicrogreffe = codeMicrogreffe;
+ 
   try {
     const result = await grist.docApi.applyUserActions([["AddRecord", "Suivi2", null, fields]]);
     const gristId = result.retValues[0];
-    cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, numMeristeme, date: timestamp });
+    cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, codeMicrogreffe, date: timestamp });
     const estEchec = reussite === "Échec";
-    const label = numMeristeme ? `${accessionCourante.code} — ${numMeristeme}` : accessionCourante.code;
+    const label = codeMicrogreffe ? `${accessionCourante.code} — ${codeMicrogreffe}` : accessionCourante.code;
     scansSession.push({ code: label, nom: accessionCourante.nomIntro, ok: true, echec: estEchec, gristId, accId: accessionCourante.id, etapeCode: etapeCode });
     mettreAJourCompteur(); flashEcran(estEchec ? "rouge" : "vert"); annulerScan();
   } catch(e) {
@@ -746,7 +748,7 @@ async function enregistrerScan(reussite) {
   enRegistrement = false; bc.disabled = be.disabled = false;
   bc.textContent = "Confirmer ✓"; be.textContent = "Déclarer échec ✗";
 }
-
+ 
 function mettreAJourCompteur() {
   const nb = scansSession.filter(s => s.ok).length;
   const nbEchec = scansSession.filter(s => s.echec).length;
@@ -759,7 +761,7 @@ function mettreAJourCompteur() {
   }).reverse().join("");
   document.getElementById("section-historique").style.display = "block";
 }
-
+ 
 async function annulerDernierScan(index) {
   const scan = scansSession[index];
   if (!scan || !scan.gristId) return;
@@ -770,15 +772,15 @@ async function annulerDernierScan(index) {
     mettreAJourCompteur();
   } catch(e) { afficherAlerte("alerte-scan", "Impossible d'annuler : " + e.message, "erreur"); }
 }
-
+ 
 function flashEcran(couleur) { const el = document.getElementById("flash"); el.className = "flash-overlay " + couleur + " actif"; setTimeout(() => el.classList.remove("actif"), 350); }
-
+ 
 function terminerSession() {
   const nb = scansSession.filter(s=>s.ok).length, nbEchec = scansSession.filter(s=>s.echec).length, nbErr = scansSession.filter(s=>!s.ok).length;
   document.getElementById("fin-resume").innerHTML = `<strong>Partenaire :</strong> ${PARTENAIRE_CONFIG.nom}<br><strong>Étape :</strong> ${session.etapeNom}<br><strong>Méthode :</strong> ${session.methode}<br><strong>Date :</strong> ${session.date}<br><strong>Opérateur :</strong> ${session.operateurNom}<br><strong>Emplacement :</strong> ${session.emplacement}<br><strong>Scans enregistrés :</strong> ${nb}<br>${nbEchec>0?`<strong style="color:var(--orange)">Échecs :</strong> ${nbEchec}<br>`:""}${nbErr>0?`<strong style="color:var(--erreur)">Erreurs :</strong> ${nbErr}`:""}`;
   afficherEcran("ecran-fin");
 }
-
+ 
 function nouvelleSession() {
   session={}; scansSession=[]; accessionCourante=null; enRegistrement=false;
   document.getElementById("scan-code").value="";
@@ -787,10 +789,12 @@ function nouvelleSession() {
   document.getElementById("cfg-date").value=new Date().toISOString().split("T")[0];
   afficherEcran("ecran-config");
 }
-
+ 
 function afficherEcran(id) { document.querySelectorAll(".ecran").forEach(e=>e.classList.remove("actif")); document.getElementById(id).classList.add("actif"); window.scrollTo(0,0); }
 function afficherAlerte(id, msg, type) { const el=document.getElementById(id); el.textContent=msg; el.className="alerte "+type; }
 function masquerAlerte(id) { const el=document.getElementById(id); el.className="alerte"; el.textContent=""; }
 </script>
 </body>
 </html>
+ 
+
