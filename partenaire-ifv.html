@@ -224,6 +224,7 @@ const ETAPE_TRANSMISSION  = "F_TRANSMISSION_INRAE";
 const SEQUENCE_IFV   = ["C_MICROGREFFAGE","C_CONTROLE","C_MICROBOUTURAGE","F_TRANSMISSION_INRAE"];
 const ETAPES_POST_MG = ["C_CONTROLE","C_MICROBOUTURAGE","F_TRANSMISSION_INRAE"];
 const SEUIL_MICROGREFFES  = 8;
+const ETAPE_STOCKAGE = "STOCKAGE";
 
 let cacheAccessions = {}, cacheOperateurs = [], cacheEtapes = [];
 let cacheSuivi = [];
@@ -304,6 +305,7 @@ function getMicrogreffes(accId) {
 
 // ── Validation de l'étape pour la PLANTE MÈRE (accession) ──
 function validerEtapePlanteMere(accId, etapeCode) {
+  if (etapeCode === ETAPE_STOCKAGE) return null;
   const historique = cacheSuivi
     .filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) !== null);
 
@@ -480,7 +482,6 @@ async function demarrerSession() {
     cacheSuivi = suivi.id.map((id, i) => ({
       id, codeIntroId: suivi.CodeIntro[i], etapeId: suivi.Etape[i],
       numMeristeme: suivi.NumMeristeme ? suivi.NumMeristeme[i] : null,
-      nbMeristemes: suivi.NbMeristemes ? suivi.NbMeristemes[i] : null,
       date: suivi.Date[i]
     }));
   } catch(e) { console.warn("Impossible de recharger Suivi2 :", e); }
@@ -538,7 +539,7 @@ function rechercherAccession() {
   const partiesMG = input.match(/^(.+)-(M\d+)$/);
   const partiesMB = input.match(/^(.+)-(M\d+)-(MB\d+)$/);
 
-  if (partiesMB && ETAPES_POST_MG.includes(etapeCode)) {
+  if (partiesMB && (ETAPES_POST_MG.includes(etapeCode) || etapeCode === ETAPE_STOCKAGE)) {
     const codeAcc = partiesMB[1];
     const numMG   = partiesMB[2];
     const numMB   = partiesMB[3];
@@ -556,15 +557,17 @@ function rechercherAccession() {
     return;
   }
 
-  if (partiesMG && ETAPES_POST_MG.includes(etapeCode)) {
+  if (partiesMG && (ETAPES_POST_MG.includes(etapeCode) || etapeCode === ETAPE_STOCKAGE)) {
     const codeAcc = partiesMG[1];
     const numMG   = partiesMG[2];
     const acc = cacheAccessions[codeAcc];
     if (!acc) { afficherAlerte("alerte-scan", `Accession "${codeAcc}" introuvable.`, "erreur"); flashEcran("rouge"); return; }
     const mgExiste = cacheSuivi.some(r => r.codeIntroId === acc.id && codeEtapeParId(r.etapeId) === ETAPE_MICROGREFFAGE && r.numMeristeme === numMG);
     if (!mgExiste) { afficherAlerte("alerte-scan", `Microgreffe "${numMG}" introuvable pour cette accession.`, "erreur"); flashEcran("rouge"); return; }
-    const erreur = validerSequenceParMG(acc.id, etapeCode, numMG);
-    if (erreur) afficherAlerte("alerte-scan", erreur, "info");
+    if (etapeCode !== ETAPE_STOCKAGE) {
+  const erreur = validerSequenceParMG(acc.id, etapeCode, numMG);
+  if (erreur) afficherAlerte("alerte-scan", erreur, "info");
+}
     accessionCourante = { code: codeAcc, ...acc, numMeristeme: numMG };
     document.getElementById("scan-nomIntro").textContent = acc.nomIntro;
     document.getElementById("scan-nomVar").textContent = acc.nomVar;
