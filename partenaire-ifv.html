@@ -106,6 +106,16 @@ textarea { resize: vertical; min-height: 60px; }
           <div class="champ"><label>Méthode <span class="requis">*</span></label><select id="cfg-methode"><option value="">— Choisir —</option></select></div>
           <div class="champ"><label>Étape <span class="requis">*</span></label><select id="cfg-etape"><option value="">— Méthode d'abord —</option></select></div>
         </div>
+        <div class="champ"><label>Campagne <span class="requis">*</span></label><select id="cfg-campagne">
+          <option value="">— Choisir —</option>
+          <option value="2024-2025">2024-2025</option>
+          <option value="2025-2026">2025-2026</option>
+          <option value="2026-2027">2026-2027</option>
+          <option value="2027-2028">2027-2028</option>
+          <option value="2028-2029">2028-2029</option>
+          <option value="2029-2030">2029-2030</option>
+          <option value="2030-2031">2030-2031</option>
+        </select></div>
         <div class="champ"><label>Emplacement <span class="requis">*</span></label><input type="text" id="cfg-emplacement" placeholder="Ex : Serre B, étagère 3"></div>
       </div>
     </div>
@@ -273,7 +283,14 @@ async function chargerDonnees() {
     dispo.forEach(m => selM.innerHTML += `<option value="${m}">${m}</option>`);
     if (PARTENAIRE_CONFIG.methodeImposee && dispo.length === 1) { selM.value = dispo[0]; selM.disabled = true; filtrerEtapesConfig(); }
  
-    accs.id.forEach((id, i) => { const c = accs.CodeIntro[i]; if (c) cacheAccessions[c.toUpperCase()] = { id, nomIntro: accs.NomIntro[i] || "—", nomVar: accs.NomVar[i] || "—" }; });
+    accs.id.forEach((id, i) => {
+      const c = accs.CodeIntro[i];
+      if (!c) return;
+      const code = c.toUpperCase();
+      const entree = { id, nomIntro: accs.NomIntro[i] || "—", nomVar: accs.NomVar[i] || "—", campagne: accs.Campagne[i] || null };
+      if (!cacheAccessions[code]) cacheAccessions[code] = [];
+      cacheAccessions[code].push(entree);
+    });
  
     const suivi = await grist.docApi.fetchTable("Suivi2");
     cacheSuivi = suivi.id.map((id, i) => ({
@@ -301,6 +318,17 @@ function getMicrogreffes(accId) {
   return [...new Set(cacheSuivi
     .filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) === ETAPE_MICROGREFFAGE && r.codeMicrogreffe)
     .map(r => r.codeMicrogreffe))].sort();
+}
+ 
+// ── Résolution d'une accession en tenant compte de la campagne de session ──
+// Un même CodeIntro peut exister pour plusieurs campagnes (reprise après échec) :
+// on désambiguïse avec la campagne choisie en début de session.
+function trouverAccession(code) {
+  const candidats = cacheAccessions[code];
+  if (!candidats || candidats.length === 0) return { statut: "introuvable" };
+  const match = candidats.find(a => a.campagne === session.campagne);
+  if (!match) return { statut: "mauvaise_campagne" };
+  return { statut: "ok", acc: match };
 }
  
 // ── Validation de l'étape pour la PLANTE MÈRE (accession) ──
@@ -470,17 +498,19 @@ async function demarrerSession() {
   const etapeEl = document.getElementById("cfg-etape");
   const etape = etapeEl.value;
   const etapeNom = etapeEl.options[etapeEl.selectedIndex]?.text || "";
+  const campagne = document.getElementById("cfg-campagne").value;
   const emplacement = document.getElementById("cfg-emplacement").value.trim();
   if (!date)        return afficherAlerte("alerte-config", "La date est obligatoire.", "erreur");
   if (!operateur)   return afficherAlerte("alerte-config", "L'opérateur est obligatoire.", "erreur");
   if (!methode)     return afficherAlerte("alerte-config", "La méthode est obligatoire.", "erreur");
   if (!etape)       return afficherAlerte("alerte-config", "L'étape est obligatoire.", "erreur");
+  if (!campagne)    return afficherAlerte("alerte-config", "La campagne est obligatoire.", "erreur");
   if (!emplacement) return afficherAlerte("alerte-config", "L'emplacement est obligatoire.", "erreur");
   const opNom = document.querySelector(`#cfg-operateur option[value="${operateur}"]`)?.textContent || "";
-  session = { date, operateur: parseInt(operateur), operateurNom: opNom, methode, etape: parseInt(etape), etapeNom, emplacement, codePartenaire: PARTENAIRE_CONFIG.code };
+  session = { date, operateur: parseInt(operateur), operateurNom: opNom, methode, etape: parseInt(etape), etapeNom, campagne, emplacement, codePartenaire: PARTENAIRE_CONFIG.code };
   scansSession = [];
   document.getElementById("badge-etape").textContent = etapeNom;
-  document.getElementById("badge-info").textContent = `${PARTENAIRE_CONFIG.nom} · ${methode} · ${opNom} · ${emplacement}`;
+  document.getElementById("badge-info").textContent = `${PARTENAIRE_CONFIG.nom} · ${campagne} · ${methode} · ${opNom} · ${emplacement}`;
   document.getElementById("badge-compteur").textContent = "0 scan";
   try {
     const suivi = await grist.docApi.fetchTable("Suivi2");
@@ -548,8 +578,10 @@ function rechercherAccession() {
     const codeAcc = partiesMB[1];
     const numMG   = partiesMB[2];
     const numMB   = partiesMB[3];
-    const acc = cacheAccessions[codeAcc];
-    if (!acc) { afficherAlerte("alerte-scan", `Accession "${codeAcc}" introuvable.`, "erreur"); flashEcran("rouge"); return; }
+    const rechercheAcc = trouverAccession(codeAcc);
+    if (rechercheAcc.statut === "introuvable") { afficherAlerte("alerte-scan", `Accession "${codeAcc}" introuvable.`, "erreur"); flashEcran("rouge"); return; }
+    if (rechercheAcc.statut === "mauvaise_campagne") { afficherAlerte("alerte-scan", `Ce code existe mais pas pour la campagne ${session.campagne}.`, "erreur"); flashEcran("rouge"); return; }
+    const acc = rechercheAcc.acc;
     const mgExiste = cacheSuivi.some(r => r.codeIntroId === acc.id && codeEtapeParId(r.etapeId) === ETAPE_MICROGREFFAGE && r.codeMicrogreffe === numMG);
     if (!mgExiste) { afficherAlerte("alerte-scan", `Microgreffe "${numMG}" introuvable pour cette accession.`, "erreur"); flashEcran("rouge"); return; }
     accessionCourante = { code: codeAcc, ...acc, codeMicrogreffe: numMG + "-" + numMB };
@@ -565,8 +597,10 @@ function rechercherAccession() {
   if (partiesMG && (ETAPES_POST_MG.includes(etapeCode) || etapeCode === ETAPE_STOCKAGE)) {
     const codeAcc = partiesMG[1];
     const numMG   = partiesMG[2];
-    const acc = cacheAccessions[codeAcc];
-    if (!acc) { afficherAlerte("alerte-scan", `Accession "${codeAcc}" introuvable.`, "erreur"); flashEcran("rouge"); return; }
+    const rechercheAcc = trouverAccession(codeAcc);
+    if (rechercheAcc.statut === "introuvable") { afficherAlerte("alerte-scan", `Accession "${codeAcc}" introuvable.`, "erreur"); flashEcran("rouge"); return; }
+    if (rechercheAcc.statut === "mauvaise_campagne") { afficherAlerte("alerte-scan", `Ce code existe mais pas pour la campagne ${session.campagne}.`, "erreur"); flashEcran("rouge"); return; }
+    const acc = rechercheAcc.acc;
     const mgExiste = cacheSuivi.some(r => r.codeIntroId === acc.id && codeEtapeParId(r.etapeId) === ETAPE_MICROGREFFAGE && r.codeMicrogreffe === numMG);
     if (!mgExiste) { afficherAlerte("alerte-scan", `Microgreffe "${numMG}" introuvable pour cette accession.`, "erreur"); flashEcran("rouge"); return; }
     if (etapeCode !== ETAPE_STOCKAGE) {
@@ -584,8 +618,9 @@ function rechercherAccession() {
   }
  
   // ── Code simple (accession) ──
-  const acc = cacheAccessions[input];
-  if (acc) {
+  const rechercheAcc = trouverAccession(input);
+  if (rechercheAcc.statut === "ok") {
+    const acc = rechercheAcc.acc;
     const etapeCode = codeEtapeParId(session.etape);
     // Si étape post-microgreffage, on n'accepte que les codes composites
     if (ETAPES_POST_MG.includes(etapeCode)) {
@@ -609,7 +644,12 @@ function rechercherAccession() {
   } else {
     accessionCourante = null;
     document.getElementById("scan-info-bloc").style.display = "none";
-    if (input.length > 2) { afficherAlerte("alerte-scan", `Code "${input}" introuvable.`, "erreur"); flashEcran("rouge"); }
+    if (input.length > 2) {
+      const msg = rechercheAcc.statut === "mauvaise_campagne"
+        ? `Ce code existe mais pas pour la campagne ${session.campagne}.`
+        : `Code "${input}" introuvable.`;
+      afficherAlerte("alerte-scan", msg, "erreur"); flashEcran("rouge");
+    }
   }
 }
  
@@ -775,7 +815,7 @@ function flashEcran(couleur) { const el = document.getElementById("flash"); el.c
  
 function terminerSession() {
   const nb = scansSession.filter(s=>s.ok).length, nbEchec = scansSession.filter(s=>s.echec).length, nbErr = scansSession.filter(s=>!s.ok).length;
-  document.getElementById("fin-resume").innerHTML = `<strong>Partenaire :</strong> ${PARTENAIRE_CONFIG.nom}<br><strong>Étape :</strong> ${session.etapeNom}<br><strong>Méthode :</strong> ${session.methode}<br><strong>Date :</strong> ${session.date}<br><strong>Opérateur :</strong> ${session.operateurNom}<br><strong>Emplacement :</strong> ${session.emplacement}<br><strong>Scans enregistrés :</strong> ${nb}<br>${nbEchec>0?`<strong style="color:var(--orange)">Échecs :</strong> ${nbEchec}<br>`:""}${nbErr>0?`<strong style="color:var(--erreur)">Erreurs :</strong> ${nbErr}`:""}`;
+  document.getElementById("fin-resume").innerHTML = `<strong>Partenaire :</strong> ${PARTENAIRE_CONFIG.nom}<br><strong>Campagne :</strong> ${session.campagne}<br><strong>Étape :</strong> ${session.etapeNom}<br><strong>Méthode :</strong> ${session.methode}<br><strong>Date :</strong> ${session.date}<br><strong>Opérateur :</strong> ${session.operateurNom}<br><strong>Emplacement :</strong> ${session.emplacement}<br><strong>Scans enregistrés :</strong> ${nb}<br>${nbEchec>0?`<strong style="color:var(--orange)">Échecs :</strong> ${nbEchec}<br>`:""}${nbErr>0?`<strong style="color:var(--erreur)">Erreurs :</strong> ${nbErr}`:""}`;
   afficherEcran("ecran-fin");
 }
  
