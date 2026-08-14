@@ -98,7 +98,7 @@ textarea { resize: vertical; min-height: 60px; }
 <div class="flash-overlay" id="flash"></div>
 <div class="container">
   <div id="ecran-chargement" class="chargement">Connexion à Grist <span class="spinner"></span></div>
-
+ 
   <div class="ecran" id="ecran-config">
     <div id="alerte-config" class="alerte"></div>
     <div class="partenaire-tag" id="partenaire-tag"></div>
@@ -113,12 +113,22 @@ textarea { resize: vertical; min-height: 60px; }
           <div class="champ"><label>Méthode <span class="requis">*</span></label><select id="cfg-methode"><option value="">— Choisir —</option></select></div>
           <div class="champ"><label>Étape <span class="requis">*</span></label><select id="cfg-etape"><option value="">— Méthode d'abord —</option></select></div>
         </div>
+        <div class="champ"><label>Campagne <span class="requis">*</span></label><select id="cfg-campagne">
+          <option value="">— Choisir —</option>
+          <option value="2024-2025">2024-2025</option>
+          <option value="2025-2026">2025-2026</option>
+          <option value="2026-2027">2026-2027</option>
+          <option value="2027-2028">2027-2028</option>
+          <option value="2028-2029">2028-2029</option>
+          <option value="2029-2030">2029-2030</option>
+          <option value="2030-2031">2030-2031</option>
+        </select></div>
         <div class="champ"><label>Emplacement <span class="requis">*</span></label><input type="text" id="cfg-emplacement" placeholder="Ex : Serre B, étagère 3"></div>
       </div>
     </div>
     <div class="btns"><button class="btn btn-principal" onclick="demarrerSession()">Démarrer la session →</button></div>
   </div>
-
+ 
   <div class="ecran" id="ecran-scan">
     <div class="session-badge">
       <div><div><strong id="badge-etape">—</strong></div><div class="session-info" id="badge-info">—</div></div>
@@ -157,7 +167,7 @@ textarea { resize: vertical; min-height: 60px; }
     </div>
     <div class="btns"><button class="btn btn-secondaire" onclick="terminerSession()">Terminer la session</button></div>
   </div>
-
+ 
   <div class="ecran" id="ecran-fin">
     <div class="section">
       <div class="section-titre">Session terminée</div>
@@ -166,7 +176,7 @@ textarea { resize: vertical; min-height: 60px; }
     <div class="btns"><button class="btn btn-principal" onclick="nouvelleSession()">Nouvelle session</button></div>
   </div>
 </div>
-
+ 
 <script>
 // ════════════════════════════════════════════════
 //  ▼▼▼ SEULE PARTIE À MODIFIER PAR PARTENAIRE ▼▼▼
@@ -192,12 +202,12 @@ const PARTENAIRE_CONFIG = {
 // ════════════════════════════════════════════════
 //  ▲▲▲ FIN DE LA PARTIE À MODIFIER ▲▲▲
 // ════════════════════════════════════════════════
-
+ 
 let cacheAccessions = {}, cacheOperateurs = [], cacheEtapes = [];
 let session = {}, scansSession = [], accessionCourante = null, enRegistrement = false;
-
+ 
 grist.ready({ requiredAccess: "full" });
-
+ 
 async function init() {
   appliquerConfig();
   await chargerDonnees();
@@ -207,7 +217,7 @@ async function init() {
   document.getElementById("cfg-methode").addEventListener("change", filtrerEtapesConfig);
 }
 window.addEventListener("load", init);
-
+ 
 function appliquerConfig() {
   document.getElementById("partenaire-tag").textContent = PARTENAIRE_CONFIG.nom;
   document.title = "Saisie — " + PARTENAIRE_CONFIG.nom;
@@ -222,10 +232,10 @@ function appliquerConfig() {
   const bloc = document.getElementById("champs-acc-bloc");
   if (bloc) bloc.style.display = aucun ? "none" : "";
 }
-
+ 
 function afficherChamp(id, visible) { const el = document.getElementById(id); if (el) el.style.display = visible ? "" : "none"; }
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
-
+ 
 async function chargerDonnees() {
   try {
     const [ops, etapes, accs] = await Promise.all([
@@ -237,11 +247,11 @@ async function chargerDonnees() {
     const selOp = document.getElementById("cfg-operateur");
     selOp.innerHTML = '<option value="">— Choisir —</option>';
     cacheOperateurs.forEach(op => selOp.innerHTML += `<option value="${op.id}">${op.nom}</option>`);
-
+ 
     const exclus = PARTENAIRE_CONFIG.etapesExclues || [];
     cacheEtapes = etapes.id.map((id, i) => ({ id, code: etapes.CodeEtape[i], nom: etapes.NomEtape[i], methode: etapes.Methode[i], ordre: etapes.OrdreAffichage[i] }))
       .filter(e => !exclus.includes(e.code)).sort((a,b) => a.ordre - b.ordre);
-
+ 
     const mc = PARTENAIRE_CONFIG.methodes || [];
     const toutes = [...new Set(cacheEtapes.filter(e => e.methode !== "Commune").map(e => e.methode))];
     const dispo = mc.length > 0 ? toutes.filter(m => mc.includes(m)) : toutes;
@@ -249,11 +259,18 @@ async function chargerDonnees() {
     selM.innerHTML = '<option value="">— Choisir —</option>';
     dispo.forEach(m => selM.innerHTML += `<option value="${m}">${m}</option>`);
     if (PARTENAIRE_CONFIG.methodeImposee && dispo.length === 1) { selM.value = dispo[0]; selM.disabled = true; filtrerEtapesConfig(); }
-
-    accs.id.forEach((id, i) => { const c = accs.CodeIntro[i]; if (c) cacheAccessions[c.toUpperCase()] = { id, nomIntro: accs.NomIntro[i] || "—", nomVar: accs.NomVar[i] || "—" }; });
+ 
+    accs.id.forEach((id, i) => {
+      const c = accs.CodeIntro[i];
+      if (!c) return;
+      const code = c.toUpperCase();
+      const entree = { id, nomIntro: accs.NomIntro[i] || "—", nomVar: accs.NomVar[i] || "—", campagne: accs.Campagne[i] || null };
+      if (!cacheAccessions[code]) cacheAccessions[code] = [];
+      cacheAccessions[code].push(entree);
+    });
   } catch(e) { afficherAlerte("alerte-config", "Erreur de chargement : " + e.message, "erreur"); }
 }
-
+ 
 function filtrerEtapesConfig() {
   const m = document.getElementById("cfg-methode").value;
   const sel = document.getElementById("cfg-etape");
@@ -261,7 +278,18 @@ function filtrerEtapesConfig() {
   if (!m) return;
   cacheEtapes.filter(e => e.methode === m || e.methode === "Commune").forEach(e => sel.innerHTML += `<option value="${e.id}">${e.nom}</option>`);
 }
-
+ 
+// ── Résolution d'une accession en tenant compte de la campagne de session ──
+// Un même CodeIntro peut exister pour plusieurs campagnes (reprise après échec) :
+// on désambiguïse avec la campagne choisie en début de session.
+function trouverAccession(code) {
+  const candidats = cacheAccessions[code];
+  if (!candidats || candidats.length === 0) return { statut: "introuvable" };
+  const match = candidats.find(a => a.campagne === session.campagne);
+  if (!match) return { statut: "mauvaise_campagne" };
+  return { statut: "ok", acc: match };
+}
+ 
 function demarrerSession() {
   masquerAlerte("alerte-config");
   const date = document.getElementById("cfg-date").value;
@@ -270,17 +298,19 @@ function demarrerSession() {
   const etapeEl = document.getElementById("cfg-etape");
   const etape = etapeEl.value;
   const etapeNom = etapeEl.options[etapeEl.selectedIndex]?.text || "";
+  const campagne = document.getElementById("cfg-campagne").value;
   const emplacement = document.getElementById("cfg-emplacement").value.trim();
   if (!date)        return afficherAlerte("alerte-config", "La date est obligatoire.", "erreur");
   if (!operateur)   return afficherAlerte("alerte-config", "L'opérateur est obligatoire.", "erreur");
   if (!methode)     return afficherAlerte("alerte-config", "La méthode est obligatoire.", "erreur");
   if (!etape)       return afficherAlerte("alerte-config", "L'étape est obligatoire.", "erreur");
+  if (!campagne)    return afficherAlerte("alerte-config", "La campagne est obligatoire.", "erreur");
   if (!emplacement) return afficherAlerte("alerte-config", "L'emplacement est obligatoire.", "erreur");
   const opNom = document.querySelector(`#cfg-operateur option[value="${operateur}"]`)?.textContent || "";
-  session = { date, operateur: parseInt(operateur), operateurNom: opNom, methode, etape: parseInt(etape), etapeNom, emplacement, codePartenaire: PARTENAIRE_CONFIG.code };
+  session = { date, operateur: parseInt(operateur), operateurNom: opNom, methode, etape: parseInt(etape), etapeNom, campagne, emplacement, codePartenaire: PARTENAIRE_CONFIG.code };
   scansSession = [];
   document.getElementById("badge-etape").textContent = etapeNom;
-  document.getElementById("badge-info").textContent = `${PARTENAIRE_CONFIG.nom} · ${methode} · ${opNom} · ${emplacement}`;
+  document.getElementById("badge-info").textContent = `${PARTENAIRE_CONFIG.nom} · ${campagne} · ${methode} · ${opNom} · ${emplacement}`;
   document.getElementById("badge-compteur").textContent = "0 scan";
   afficherEcran("ecran-scan");
   const si = document.getElementById("scan-code"); si.replaceWith(si.cloneNode(true));
@@ -289,13 +319,14 @@ function demarrerSession() {
   ni.addEventListener("input", debounce(e => { if (e.target.value.trim().length > 2) rechercherAccession(); }, 350));
   setTimeout(() => ni.focus(), 100);
 }
-
+ 
 function rechercherAccession() {
   const code = document.getElementById("scan-code").value.trim().toUpperCase();
   masquerAlerte("alerte-scan");
   if (!code) return;
-  const acc = cacheAccessions[code];
-  if (acc) {
+  const rechercheAcc = trouverAccession(code);
+  if (rechercheAcc.statut === "ok") {
+    const acc = rechercheAcc.acc;
     accessionCourante = { code, ...acc };
     document.getElementById("scan-nomIntro").textContent = acc.nomIntro;
     document.getElementById("scan-nomVar").textContent = acc.nomVar;
@@ -305,10 +336,15 @@ function rechercherAccession() {
   } else {
     accessionCourante = null;
     document.getElementById("scan-info-bloc").style.display = "none";
-    if (code.length > 2) { afficherAlerte("alerte-scan", `Code "${code}" introuvable.`, "erreur"); flashEcran("rouge"); }
+    if (code.length > 2) {
+      const msg = rechercheAcc.statut === "mauvaise_campagne"
+        ? `Ce code existe mais pas pour la campagne ${session.campagne}.`
+        : `Code "${code}" introuvable.`;
+      afficherAlerte("alerte-scan", msg, "erreur"); flashEcran("rouge");
+    }
   }
 }
-
+ 
 function annulerScan() {
   accessionCourante = null;
   document.getElementById("scan-code").value = "";
@@ -316,7 +352,7 @@ function annulerScan() {
   masquerAlerte("alerte-scan");
   document.getElementById("scan-code").focus();
 }
-
+ 
 async function enregistrerScan(reussite) {
   if (!accessionCourante || enRegistrement) return;
   const cfg = PARTENAIRE_CONFIG.champs || {};
@@ -355,7 +391,7 @@ async function enregistrerScan(reussite) {
   enRegistrement = false; bc.disabled = be.disabled = false;
   bc.textContent = "Confirmer ✓"; be.textContent = "Déclarer échec ✗";
 }
-
+ 
 function mettreAJourCompteur() {
   const nb = scansSession.filter(s => s.ok).length;
   const nbEchec = scansSession.filter(s => s.echec).length;
@@ -368,22 +404,22 @@ function mettreAJourCompteur() {
   }).reverse().join("");
   document.getElementById("section-historique").style.display = "block";
 }
-
+ 
 async function annulerDernierScan(index) {
   const scan = scansSession[index];
   if (!scan || !scan.gristId) return;
   try { await grist.docApi.applyUserActions([["RemoveRecord", "Suivi2", scan.gristId]]); scansSession.splice(index, 1); mettreAJourCompteur(); }
   catch(e) { afficherAlerte("alerte-scan", "Impossible d'annuler : " + e.message, "erreur"); }
 }
-
+ 
 function flashEcran(couleur) { const el = document.getElementById("flash"); el.className = "flash-overlay " + couleur + " actif"; setTimeout(() => el.classList.remove("actif"), 350); }
-
+ 
 function terminerSession() {
   const nb = scansSession.filter(s=>s.ok).length, nbEchec = scansSession.filter(s=>s.echec).length, nbErr = scansSession.filter(s=>!s.ok).length;
-  document.getElementById("fin-resume").innerHTML = `<strong>Partenaire :</strong> ${PARTENAIRE_CONFIG.nom}<br><strong>Étape :</strong> ${session.etapeNom}<br><strong>Méthode :</strong> ${session.methode}<br><strong>Date :</strong> ${session.date}<br><strong>Opérateur :</strong> ${session.operateurNom}<br><strong>Emplacement :</strong> ${session.emplacement}<br><strong>Scans enregistrés :</strong> ${nb}<br>${nbEchec>0?`<strong style="color:#e65100">Échecs :</strong> ${nbEchec}<br>`:""}${nbErr>0?`<strong style="color:var(--erreur)">Erreurs :</strong> ${nbErr}`:""}`;
+  document.getElementById("fin-resume").innerHTML = `<strong>Partenaire :</strong> ${PARTENAIRE_CONFIG.nom}<br><strong>Campagne :</strong> ${session.campagne}<br><strong>Étape :</strong> ${session.etapeNom}<br><strong>Méthode :</strong> ${session.methode}<br><strong>Date :</strong> ${session.date}<br><strong>Opérateur :</strong> ${session.operateurNom}<br><strong>Emplacement :</strong> ${session.emplacement}<br><strong>Scans enregistrés :</strong> ${nb}<br>${nbEchec>0?`<strong style="color:#e65100">Échecs :</strong> ${nbEchec}<br>`:""}${nbErr>0?`<strong style="color:var(--erreur)">Erreurs :</strong> ${nbErr}`:""}`;
   afficherEcran("ecran-fin");
 }
-
+ 
 function nouvelleSession() {
   session={}; scansSession=[]; accessionCourante=null; enRegistrement=false;
   document.getElementById("scan-code").value="";
@@ -392,10 +428,12 @@ function nouvelleSession() {
   document.getElementById("cfg-date").value=new Date().toISOString().split("T")[0];
   afficherEcran("ecran-config");
 }
-
+ 
 function afficherEcran(id) { document.querySelectorAll(".ecran").forEach(e=>e.classList.remove("actif")); document.getElementById(id).classList.add("actif"); window.scrollTo(0,0); }
 function afficherAlerte(id, msg, type) { const el=document.getElementById(id); el.textContent=msg; el.className="alerte "+type; }
 function masquerAlerte(id) { const el=document.getElementById(id); el.className="alerte"; el.textContent=""; }
 </script>
 </body>
 </html>
+ 
+
