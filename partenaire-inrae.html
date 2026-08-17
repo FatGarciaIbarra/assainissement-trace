@@ -1,5 +1,3 @@
-
-Partenaire inrae assainissement · TXT
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -146,14 +144,9 @@ textarea { resize: vertical; min-height: 60px; }
             <div class="info-item"><div class="info-label">Nom intro</div><div class="info-valeur" id="scan-nomIntro">—</div></div>
             <div class="info-item"><div class="info-label">Nom variété</div><div class="info-valeur" id="scan-nomVar">—</div></div>
           </div>
-          <div class="champs-acc" id="champs-acc-bloc">
-            <div class="champs-acc-titre">Données pour cette accession</div>
-            <div class="champ" id="champ-milieu"><label>Milieu</label><input type="text" id="scan-milieu" placeholder="Laisser vide si non applicable"></div>
-            <div class="grid-2" id="champ-apex-meristemes">
-              <div class="champ" id="champ-nbApex"><label>Nb apex</label><input type="number" id="scan-nbApex" min="0" placeholder="—"></div>
-              <div class="champ" id="champ-nbMeristemes"><label>Nb méristèmes</label><input type="number" id="scan-nbMeristemes" min="0" placeholder="—"></div>
-            </div>
-            <div class="champ" id="champ-commentaire"><label>Commentaire</label><textarea id="scan-commentaire" placeholder="Observation…"></textarea></div>
+          <div class="champs-acc" id="champs-communs">
+            <div class="champs-acc-titre">Données complémentaires</div>
+            <div class="champ"><label>Commentaire</label><textarea id="scan-commentaire" placeholder="Observation…"></textarea></div>
           </div>
           <div class="btns-scan">
             <button class="btn btn-secondaire" onclick="annulerScan()">✕</button>
@@ -195,9 +188,6 @@ const PARTENAIRE_CONFIG = {
     "F_RECEPTION_PECH","F_PLANTATION","F_SUIVI_PLANTATION"
   ],
   champs: {
-    milieu:       { visible: true, requis: false },
-    nbApex:       { visible: true, requis: false },
-    nbMeristemes: { visible: true, requis: false },
     commentaire:  { visible: true, requis: false }
   }
 };
@@ -206,6 +196,7 @@ const PARTENAIRE_CONFIG = {
 // ════════════════════════════════════════════════
  
 let cacheAccessions = {}, cacheOperateurs = [], cacheEtapes = [];
+let cacheSuivi = [];
 let session = {}, scansSession = [], accessionCourante = null, enRegistrement = false;
  
 grist.ready({ requiredAccess: "full" });
@@ -223,19 +214,8 @@ window.addEventListener("load", init);
 function appliquerConfig() {
   document.getElementById("partenaire-tag").textContent = PARTENAIRE_CONFIG.nom;
   document.title = "Saisie — " + PARTENAIRE_CONFIG.nom;
-  const ch = PARTENAIRE_CONFIG.champs || {};
-  afficherChamp("champ-milieu",       ch.milieu?.visible       !== false);
-  afficherChamp("champ-nbApex",       ch.nbApex?.visible       !== false);
-  afficherChamp("champ-nbMeristemes", ch.nbMeristemes?.visible !== false);
-  afficherChamp("champ-commentaire",  ch.commentaire?.visible  !== false);
-  const grid = document.getElementById("champ-apex-meristemes");
-  if (grid) grid.style.display = (ch.nbApex?.visible !== false || ch.nbMeristemes?.visible !== false) ? "" : "none";
-  const aucun = [ch.milieu, ch.nbApex, ch.nbMeristemes, ch.commentaire].every(c => c?.visible === false);
-  const bloc = document.getElementById("champs-acc-bloc");
-  if (bloc) bloc.style.display = aucun ? "none" : "";
 }
  
-function afficherChamp(id, visible) { const el = document.getElementById(id); if (el) el.style.display = visible ? "" : "none"; }
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
  
 async function chargerDonnees() {
@@ -270,6 +250,15 @@ async function chargerDonnees() {
       if (!cacheAccessions[code]) cacheAccessions[code] = [];
       cacheAccessions[code].push(entree);
     });
+ 
+    const suivi = await grist.docApi.fetchTable("Suivi2");
+    cacheSuivi = suivi.id.map((id, i) => ({
+      id,
+      codeIntroId:    suivi.CodeIntro[i],
+      etapeId:        suivi.Etape[i],
+      codePartenaire: suivi.CodePartenaire[i],
+      date:           suivi.Date[i]
+    }));
   } catch(e) { afficherAlerte("alerte-config", "Erreur de chargement : " + e.message, "erreur"); }
 }
  
@@ -280,6 +269,8 @@ function filtrerEtapesConfig() {
   if (!m) return;
   cacheEtapes.filter(e => e.methode === m || e.methode === "Commune").forEach(e => sel.innerHTML += `<option value="${e.id}">${e.nom}</option>`);
 }
+ 
+function codeEtapeParId(id) { const e = cacheEtapes.find(e => e.id === id); return e ? e.code : null; }
  
 // ── Résolution d'une accession en tenant compte de la campagne de session ──
 // Un même CodeIntro peut exister pour plusieurs campagnes (reprise après échec) :
@@ -292,7 +283,26 @@ function trouverAccession(code) {
   return { statut: "ok", acc: match };
 }
  
-function demarrerSession() {
+// ── Vérifie qu'une accession n'est pas réceptionnée par deux partenaires différents ──
+// dans la même campagne, sauf si un changement de méthode (CHGT_METHODE) a eu lieu entretemps.
+function verifierReceptionCroisee(accId) {
+  const historique = cacheSuivi
+    .filter(r => r.codeIntroId === accId)
+    .sort((a,b) => a.date - b.date || a.id - b.id);
+  const receptionsAutrePartenaire = historique.filter(r =>
+    codeEtapeParId(r.etapeId) === "RECEPTION" && r.codePartenaire !== session.codePartenaire
+  );
+  if (receptionsAutrePartenaire.length === 0) return null;
+  const derniereReception = receptionsAutrePartenaire[receptionsAutrePartenaire.length - 1];
+  const chgtMethodeApres = historique.some(r =>
+    codeEtapeParId(r.etapeId) === "CHGT_METHODE" &&
+    (r.date > derniereReception.date || (r.date === derniereReception.date && r.id > derniereReception.id))
+  );
+  if (chgtMethodeApres) return null;
+  return `Cette accession a déjà été réceptionnée par un autre partenaire (${derniereReception.codePartenaire}) pour cette campagne. Un changement de méthode est requis avant une nouvelle réception.`;
+}
+ 
+async function demarrerSession() {
   masquerAlerte("alerte-config");
   const date = document.getElementById("cfg-date").value;
   const operateur = document.getElementById("cfg-operateur").value;
@@ -314,6 +324,13 @@ function demarrerSession() {
   document.getElementById("badge-etape").textContent = etapeNom;
   document.getElementById("badge-info").textContent = `${PARTENAIRE_CONFIG.nom} · ${campagne} · ${methode} · ${opNom} · ${emplacement}`;
   document.getElementById("badge-compteur").textContent = "0 scan";
+  try {
+    const suivi = await grist.docApi.fetchTable("Suivi2");
+    cacheSuivi = suivi.id.map((id, i) => ({
+      id, codeIntroId: suivi.CodeIntro[i], etapeId: suivi.Etape[i],
+      codePartenaire: suivi.CodePartenaire[i], date: suivi.Date[i]
+    }));
+  } catch(e) { console.warn("Impossible de recharger Suivi2 :", e); }
   afficherEcran("ecran-scan");
   const si = document.getElementById("scan-code"); si.replaceWith(si.cloneNode(true));
   const ni = document.getElementById("scan-code");
@@ -329,11 +346,20 @@ function rechercherAccession() {
   const rechercheAcc = trouverAccession(code);
   if (rechercheAcc.statut === "ok") {
     const acc = rechercheAcc.acc;
+    if (codeEtapeParId(session.etape) === "RECEPTION") {
+      const conflit = verifierReceptionCroisee(acc.id);
+      if (conflit) {
+        accessionCourante = null;
+        document.getElementById("scan-info-bloc").style.display = "none";
+        afficherAlerte("alerte-scan", conflit, "erreur"); flashEcran("rouge");
+        return;
+      }
+    }
     accessionCourante = { code, ...acc };
     document.getElementById("scan-nomIntro").textContent = acc.nomIntro;
     document.getElementById("scan-nomVar").textContent = acc.nomVar;
     document.getElementById("scan-info-bloc").style.display = "block";
-    ["scan-milieu","scan-nbApex","scan-nbMeristemes","scan-commentaire"].forEach(id => document.getElementById(id).value = "");
+    document.getElementById("scan-commentaire").value = "";
     setTimeout(() => document.getElementById("btn-confirmer").focus(), 50);
   } else {
     accessionCourante = null;
@@ -357,10 +383,6 @@ function annulerScan() {
  
 async function enregistrerScan(reussite) {
   if (!accessionCourante || enRegistrement) return;
-  const cfg = PARTENAIRE_CONFIG.champs || {};
-  if (cfg.milieu?.requis && !document.getElementById("scan-milieu").value.trim()) return afficherAlerte("alerte-scan", "Milieu obligatoire.", "erreur");
-  if (cfg.nbApex?.requis && !document.getElementById("scan-nbApex").value) return afficherAlerte("alerte-scan", "Nb apex obligatoire.", "erreur");
-  if (cfg.nbMeristemes?.requis && !document.getElementById("scan-nbMeristemes").value) return afficherAlerte("alerte-scan", "Nb méristèmes obligatoire.", "erreur");
   enRegistrement = true;
   const bc = document.getElementById("btn-confirmer"), be = document.getElementById("btn-echec");
   bc.disabled = be.disabled = true;
@@ -371,15 +393,9 @@ async function enregistrerScan(reussite) {
     Date: Math.floor(new Date(session.date).getTime() / 1000), Operateur: session.operateur,
     Emplacement: session.emplacement, CodePartenaire: session.codePartenaire
   };
-  const milieu = document.getElementById("scan-milieu").value;
-  const nbApex = parseInt(document.getElementById("scan-nbApex").value) || null;
-  const nbMeristemes = parseInt(document.getElementById("scan-nbMeristemes").value) || null;
   const commentaire = document.getElementById("scan-commentaire").value;
   if (reussite)    fields.Reussite     = reussite;
   if (commentaire) fields.Commentaires = commentaire;
-  if (milieu)      fields.Milieu       = milieu;
-  if (nbApex)      fields.NbApex       = nbApex;
-  if (nbMeristemes)fields.NbMeristemes = nbMeristemes;
   try {
     const result = await grist.docApi.applyUserActions([["AddRecord", "Suivi2", null, fields]]);
     const gristId = result.retValues[0];
@@ -438,4 +454,3 @@ function masquerAlerte(id) { const el=document.getElementById(id); el.className=
 </body>
 </html>
  
-
