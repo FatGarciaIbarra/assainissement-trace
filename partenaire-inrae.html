@@ -258,6 +258,7 @@ async function chargerDonnees() {
       codeIntroId:    suivi.CodeIntro[i],
       etapeId:        suivi.Etape[i],
       codePartenaire: suivi.CodePartenaire[i],
+      reussite:       suivi.Reussite[i],
       date:           suivi.Date[i]
     }));
   } catch(e) { afficherAlerte("alerte-config", "Erreur de chargement : " + e.message, "erreur"); }
@@ -272,6 +273,7 @@ function filtrerEtapesConfig() {
 }
  
 function codeEtapeParId(id) { const e = cacheEtapes.find(e => e.id === id); return e ? e.code : null; }
+function nomEtapeParId(id)  { const e = cacheEtapes.find(e => e.id === id); return e ? e.nom : null; }
  
 // ── Résolution d'une accession en tenant compte de la campagne de session ──
 // Un même CodeIntro peut exister pour plusieurs campagnes (reprise après échec) :
@@ -285,8 +287,10 @@ function trouverAccession(code) {
 }
  
 // ── Détermine le partenaire "titulaire" actuel de l'accession ──
-// C'est celui de sa dernière RECEPTION, tant qu'aucun CHGT_METHODE n'a eu lieu depuis.
-// Retourne null si jamais réceptionnée, ou si un CHGT_METHODE l'a rendue "libre" depuis.
+// C'est celui de sa dernière RECEPTION réussie, tant qu'aucun CHGT_METHODE n'a eu lieu depuis.
+// Retourne null si jamais réceptionnée avec succès, ou si un CHGT_METHODE l'a rendue "libre" depuis.
+// Une RECEPTION marquée Échec ne compte pas : rien n'a été réellement reçu, donc elle ne bloque
+// pas une nouvelle tentative de réception.
 // Note : accId est l'id Grist de la ligne Accessions déjà résolue pour LA CAMPAGNE de la
 // session (via trouverAccession()) — pas le CodeIntro texte. Un même CodeIntro sur deux
 // campagnes différentes = deux lignes/ids distincts = deux historiques indépendants ;
@@ -295,7 +299,7 @@ function partenaireActuel(accId) {
   const historique = cacheSuivi
     .filter(r => r.codeIntroId === accId)
     .sort((a,b) => a.date - b.date || a.id - b.id);
-  const receptions = historique.filter(r => codeEtapeParId(r.etapeId) === "RECEPTION");
+  const receptions = historique.filter(r => codeEtapeParId(r.etapeId) === "RECEPTION" && r.reussite !== "Échec");
   if (receptions.length === 0) return null;
   const derniereReception = receptions[receptions.length - 1];
   const chgtMethodeApres = historique.some(r =>
@@ -334,6 +338,18 @@ function dejaScanneeDansSession(accId, etapeCode) {
   return scansSession.some(s => s.ok && s.accId === accId && s.etapeCode === etapeCode);
 }
  
+// ── Avertit (non bloquant) si un échec a déjà été enregistré pour cette accession ──
+// dans cette campagne. L'opérateur reste libre de continuer — c'est une information,
+// pas une barrière, volontairement pour éviter de trop bloquer le formulaire.
+function alerteEchecAnterieur(accId) {
+  const echecs = cacheSuivi
+    .filter(r => r.codeIntroId === accId && r.reussite === "Échec")
+    .sort((a,b) => b.date - a.date || b.id - a.id);
+  if (echecs.length === 0) return null;
+  const nomEtape = nomEtapeParId(echecs[0].etapeId) || codeEtapeParId(echecs[0].etapeId);
+  return `⚠️ Un échec a été enregistré précédemment pour cette accession (étape : ${nomEtape}). Vérifier avant de continuer.`;
+}
+ 
 async function demarrerSession() {
   masquerAlerte("alerte-config");
   const date = document.getElementById("cfg-date").value;
@@ -360,7 +376,7 @@ async function demarrerSession() {
     const suivi = await grist.docApi.fetchTable("Suivi2");
     cacheSuivi = suivi.id.map((id, i) => ({
       id, codeIntroId: suivi.CodeIntro[i], etapeId: suivi.Etape[i],
-      codePartenaire: suivi.CodePartenaire[i], date: suivi.Date[i]
+      codePartenaire: suivi.CodePartenaire[i], reussite: suivi.Reussite[i], date: suivi.Date[i]
     }));
   } catch(e) { console.warn("Impossible de recharger Suivi2 :", e); }
   afficherEcran("ecran-scan");
@@ -401,6 +417,8 @@ function rechercherAccession() {
     document.getElementById("scan-nomVar").textContent = acc.nomVar;
     document.getElementById("scan-info-bloc").style.display = "block";
     document.getElementById("scan-commentaire").value = "";
+    const alerteEchec = alerteEchecAnterieur(acc.id);
+    if (alerteEchec) afficherAlerte("alerte-scan", alerteEchec, "info");
     setTimeout(() => document.getElementById("btn-confirmer").focus(), 50);
   } else {
     accessionCourante = null;
