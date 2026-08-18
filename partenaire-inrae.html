@@ -284,23 +284,50 @@ function trouverAccession(code) {
   return { statut: "ok", acc: match };
 }
  
-// ── Vérifie qu'une accession n'est pas réceptionnée par deux partenaires différents ──
-// dans la même campagne, sauf si un changement de méthode (CHGT_METHODE) a eu lieu entretemps.
-function verifierReceptionCroisee(accId) {
+// ── Détermine le partenaire "titulaire" actuel de l'accession ──
+// C'est celui de sa dernière RECEPTION, tant qu'aucun CHGT_METHODE n'a eu lieu depuis.
+// Retourne null si jamais réceptionnée, ou si un CHGT_METHODE l'a rendue "libre" depuis.
+// Note : accId est l'id Grist de la ligne Accessions déjà résolue pour LA CAMPAGNE de la
+// session (via trouverAccession()) — pas le CodeIntro texte. Un même CodeIntro sur deux
+// campagnes différentes = deux lignes/ids distincts = deux historiques indépendants ;
+// cette fonction ne regarde donc jamais au-delà de la campagne en cours.
+function partenaireActuel(accId) {
   const historique = cacheSuivi
     .filter(r => r.codeIntroId === accId)
     .sort((a,b) => a.date - b.date || a.id - b.id);
-  const receptionsAutrePartenaire = historique.filter(r =>
-    codeEtapeParId(r.etapeId) === "RECEPTION" && r.codePartenaire !== session.codePartenaire
-  );
-  if (receptionsAutrePartenaire.length === 0) return null;
-  const derniereReception = receptionsAutrePartenaire[receptionsAutrePartenaire.length - 1];
+  const receptions = historique.filter(r => codeEtapeParId(r.etapeId) === "RECEPTION");
+  if (receptions.length === 0) return null;
+  const derniereReception = receptions[receptions.length - 1];
   const chgtMethodeApres = historique.some(r =>
     codeEtapeParId(r.etapeId) === "CHGT_METHODE" &&
     (r.date > derniereReception.date || (r.date === derniereReception.date && r.id > derniereReception.id))
   );
   if (chgtMethodeApres) return null;
-  return `Cette accession a déjà été réceptionnée par un autre partenaire (${derniereReception.codePartenaire}) pour cette campagne. Un changement de méthode est requis avant une nouvelle réception.`;
+  return derniereReception.codePartenaire;
+}
+ 
+// ── Vérifie la continuité partenaire ──
+// Une accession jamais réceptionnée ne peut recevoir aucune étape hors RECEPTION.
+// Une accession déjà titulaire d'un partenaire ne peut être travaillée que par ce partenaire,
+// sauf CHGT_METHODE, qui est justement la porte de sortie pour la transférer à un autre.
+function verifierContinuitePartenaire(accId, etapeCode) {
+  if (etapeCode === "CHGT_METHODE") return null;
+  const titulaire = partenaireActuel(accId);
+  if (!titulaire) {
+    return etapeCode === "RECEPTION"
+      ? null
+      : `Cette accession n'a pas encore été réceptionnée. Elle doit d'abord passer par l'étape Réception.`;
+  }
+  if (titulaire === session.codePartenaire) return null;
+  return etapeCode === "RECEPTION"
+    ? `Cette accession a déjà été réceptionnée par ${titulaire} pour cette campagne. Un changement de méthode est requis avant une nouvelle réception.`
+    : `Cette accession est actuellement suivie par ${titulaire}. Un changement de méthode (CHGT_METHODE) est requis avant qu'un autre partenaire n'intervienne.`;
+}
+ 
+// ── Vérifie qu'on ne réenregistre pas deux fois la même accession à la même étape ──
+// dans la session en cours (même logique que le formulaire IFV).
+function dejaScanneeDansSession(accId, etapeCode) {
+  return scansSession.some(s => s.ok && s.accId === accId && s.etapeCode === etapeCode);
 }
  
 async function demarrerSession() {
@@ -347,15 +374,24 @@ function rechercherAccession() {
   const rechercheAcc = trouverAccession(code);
   if (rechercheAcc.statut === "ok") {
     const acc = rechercheAcc.acc;
-    if (codeEtapeParId(session.etape) === "RECEPTION") {
-      const conflit = verifierReceptionCroisee(acc.id);
-      if (conflit) {
-        accessionCourante = null;
-        document.getElementById("scan-info-bloc").style.display = "none";
-        afficherAlerte("alerte-scan", conflit, "erreur"); flashEcran("rouge");
-        return;
-      }
+    const etapeCode = codeEtapeParId(session.etape);
+ 
+    if (dejaScanneeDansSession(acc.id, etapeCode)) {
+      accessionCourante = null;
+      document.getElementById("scan-info-bloc").style.display = "none";
+      afficherAlerte("alerte-scan", "Cette accession a déjà été enregistrée à cette étape dans la session en cours.", "erreur");
+      flashEcran("rouge");
+      return;
     }
+ 
+    const conflit = verifierContinuitePartenaire(acc.id, etapeCode);
+    if (conflit) {
+      accessionCourante = null;
+      document.getElementById("scan-info-bloc").style.display = "none";
+      afficherAlerte("alerte-scan", conflit, "erreur"); flashEcran("rouge");
+      return;
+    }
+ 
     accessionCourante = { code, ...acc };
     document.getElementById("scan-nomIntro").textContent = acc.nomIntro;
     document.getElementById("scan-nomVar").textContent = acc.nomVar;
@@ -401,7 +437,7 @@ async function enregistrerScan(reussite) {
     const result = await grist.docApi.applyUserActions([["AddRecord", "Suivi2", null, fields]]);
     const gristId = result.retValues[0];
     const estEchec = reussite === "Échec";
-    scansSession.push({ code: accessionCourante.code, nom: accessionCourante.nomIntro, ok: true, echec: estEchec, gristId });
+    scansSession.push({ code: accessionCourante.code, nom: accessionCourante.nomIntro, ok: true, echec: estEchec, gristId, accId: accessionCourante.id, etapeCode: codeEtapeParId(session.etape) });
     mettreAJourCompteur(); flashEcran(estEchec ? "rouge" : "vert"); annulerScan();
   } catch(e) {
     scansSession.push({ code: accessionCourante.code, nom: accessionCourante.nomIntro, ok: false, echec: false });
