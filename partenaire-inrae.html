@@ -307,21 +307,25 @@ function partenaireActuel(accId) {
 }
  
 // ── Vérifie la continuité partenaire ──
-// Une accession jamais réceptionnée ne peut recevoir aucune étape hors RECEPTION.
-// Une accession déjà titulaire d'un partenaire ne peut être travaillée que par ce partenaire,
-// sauf CHGT_METHODE, qui est justement la porte de sortie pour la transférer à un autre.
+// RECEPTION est une porte à usage unique par campagne : dès qu'une réception existe (même
+// partenaire compris), une nouvelle réception est bloquée tant qu'aucun CHGT_METHODE n'a eu lieu.
+// Pour toute autre étape : une accession jamais réceptionnée bloque tout ; une accession déjà
+// titulaire d'un partenaire ne peut être travaillée que par ce partenaire, sauf CHGT_METHODE,
+// qui est justement la porte de sortie pour la transférer à un autre.
 function verifierContinuitePartenaire(accId, etapeCode) {
   if (etapeCode === "CHGT_METHODE") return null;
   const titulaire = partenaireActuel(accId);
-  if (!titulaire) {
-    return etapeCode === "RECEPTION"
-      ? null
-      : `Cette accession n'a pas encore été réceptionnée. Elle doit d'abord passer par l'étape Réception.`;
+ 
+  if (etapeCode === "RECEPTION") {
+    if (!titulaire) return null;
+    return titulaire === session.codePartenaire
+      ? `Cette accession a déjà été réceptionnée pour cette campagne. Un changement de méthode est requis avant une nouvelle réception.`
+      : `Cette accession a déjà été réceptionnée par un autre partenaire (${titulaire}) pour cette campagne. Un changement de méthode est requis avant une nouvelle réception.`;
   }
+ 
+  if (!titulaire) return `Cette accession n'a pas encore été réceptionnée. Elle doit d'abord passer par l'étape Réception.`;
   if (titulaire === session.codePartenaire) return null;
-  return etapeCode === "RECEPTION"
-    ? `Cette accession a déjà été réceptionnée par ${titulaire} pour cette campagne. Un changement de méthode est requis avant une nouvelle réception.`
-    : `Cette accession est actuellement suivie par ${titulaire}. Un changement de méthode (CHGT_METHODE) est requis avant qu'un autre partenaire n'intervienne.`;
+  return `Cette accession est actuellement suivie par ${titulaire}. Un changement de méthode (CHGT_METHODE) est requis avant qu'un autre partenaire n'intervienne.`;
 }
  
 // ── Vérifie qu'on ne réenregistre pas deux fois la même accession à la même étape ──
