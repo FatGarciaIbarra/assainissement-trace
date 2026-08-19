@@ -346,6 +346,18 @@ function dejaScanneeDansSession(accId, etapeCode) {
   return scansSession.some(s => s.ok && s.accId === accId && s.etapeCode === etapeCode);
 }
  
+// ── Avertit (non bloquant) si cette étape a déjà été enregistrée pour cette accession ──
+// (même campagne, toute date confondue) — même logique que le cycle libre d'IFV
+// (Conteneur/Tablard/Thermothérapie) : ne bloque pas, juste un rappel de la dernière étape faite.
+function alerteEtapeDejaFaite(accId, etapeCode) {
+  const historique = cacheSuivi.filter(r => r.codeIntroId === accId);
+  const dejaFaite = historique.some(r => codeEtapeParId(r.etapeId) === etapeCode);
+  if (!dejaFaite) return null;
+  const derniere = [...historique].sort((a,b) => b.date - a.date || b.id - a.id)[0];
+  const derniereNom = derniere ? (nomEtapeParId(derniere.etapeId) || codeEtapeParId(derniere.etapeId)) : null;
+  return `⚠️ Cette étape a déjà été enregistrée pour cette accession. Dernière étape enregistrée : ${derniereNom}.`;
+}
+ 
 // ── Avertit (non bloquant) si un échec a déjà été enregistré pour cette accession ──
 // dans cette campagne. L'opérateur reste libre de continuer — c'est une information,
 // pas une barrière, volontairement pour éviter de trop bloquer le formulaire.
@@ -429,8 +441,8 @@ function rechercherAccession() {
     document.getElementById("scan-nbApex").value = "";
     document.getElementById("champ-nbApexLignes").style.display = (etapeCode === ETAPE_CROISSANCE_TUBE) ? "" : "none";
     document.getElementById("scan-nbApexLignes").value = "";
-    const alerteEchec = alerteEchecAnterieur(acc.id);
-    if (alerteEchec) afficherAlerte("alerte-scan", alerteEchec, "info");
+    const alertesInfo = [alerteEtapeDejaFaite(acc.id, etapeCode), alerteEchecAnterieur(acc.id)].filter(Boolean);
+    if (alertesInfo.length) afficherAlerte("alerte-scan", alertesInfo.join(" · "), "info");
     setTimeout(() => document.getElementById("btn-confirmer").focus(), 50);
   } else {
     accessionCourante = null;
