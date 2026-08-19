@@ -487,7 +487,7 @@ async function enregistrerScan(reussite) {
       const actions = [];
       for (let n = 1; n <= nbLignes; n++) {
         const suffixe = String(n).padStart(2, "0");
-        actions.push(["AddRecord", "Suivi2", null, { ...fieldsBase, CodeMicrogreffe: `${accessionCourante.code}-M${suffixe}` }]);
+        actions.push(["AddRecord", "Suivi2", null, { ...fieldsBase, CodeMicrogreffe: `M${suffixe}` }]);
       }
       const result = await grist.docApi.applyUserActions(actions);
       const gristIds = result.retValues;
