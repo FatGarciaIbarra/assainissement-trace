@@ -146,6 +146,7 @@ textarea { resize: vertical; min-height: 60px; }
           </div>
           <div class="champs-acc" id="champs-communs">
             <div class="champs-acc-titre">Données complémentaires</div>
+            <div class="champ" id="champ-nbApex" style="display:none"><label>Nombre d'apex traités <span class="requis">*</span></label><input type="number" id="scan-nbApex" min="0" placeholder="Ex : 20"></div>
             <div class="champ"><label>Commentaire</label><textarea id="scan-commentaire" placeholder="Observation…"></textarea></div>
           </div>
           <div class="btns-scan">
@@ -195,6 +196,8 @@ const PARTENAIRE_CONFIG = {
 // ════════════════════════════════════════════════
 //  ▲▲▲ FIN DE LA PARTIE À MODIFIER ▲▲▲
 // ════════════════════════════════════════════════
+ 
+const ETAPE_CRYOTHERAPIE = "B_CRYOTHERAPIE";
  
 let cacheAccessions = {}, cacheOperateurs = [], cacheEtapes = [];
 let cacheSuivi = [];
@@ -417,6 +420,8 @@ function rechercherAccession() {
     document.getElementById("scan-nomVar").textContent = acc.nomVar;
     document.getElementById("scan-info-bloc").style.display = "block";
     document.getElementById("scan-commentaire").value = "";
+    document.getElementById("champ-nbApex").style.display = (etapeCode === ETAPE_CRYOTHERAPIE) ? "" : "none";
+    document.getElementById("scan-nbApex").value = "";
     const alerteEchec = alerteEchecAnterieur(acc.id);
     if (alerteEchec) afficherAlerte("alerte-scan", alerteEchec, "info");
     setTimeout(() => document.getElementById("btn-confirmer").focus(), 50);
@@ -442,6 +447,12 @@ function annulerScan() {
  
 async function enregistrerScan(reussite) {
   if (!accessionCourante || enRegistrement) return;
+  const etapeCode = codeEtapeParId(session.etape);
+  let nbApex = null;
+  if (etapeCode === ETAPE_CRYOTHERAPIE) {
+    nbApex = parseInt(document.getElementById("scan-nbApex").value);
+    if (!nbApex && nbApex !== 0) return afficherAlerte("alerte-scan", "Nombre d'apex traités obligatoire.", "erreur");
+  }
   enRegistrement = true;
   const bc = document.getElementById("btn-confirmer"), be = document.getElementById("btn-echec");
   bc.disabled = be.disabled = true;
@@ -455,11 +466,12 @@ async function enregistrerScan(reussite) {
   const commentaire = document.getElementById("scan-commentaire").value;
   if (reussite)    fields.Reussite     = reussite;
   if (commentaire) fields.Commentaires = commentaire;
+  if (etapeCode === ETAPE_CRYOTHERAPIE) fields.NbApex = nbApex;
   try {
     const result = await grist.docApi.applyUserActions([["AddRecord", "Suivi2", null, fields]]);
     const gristId = result.retValues[0];
     const estEchec = reussite === "Échec";
-    scansSession.push({ code: accessionCourante.code, nom: accessionCourante.nomIntro, ok: true, echec: estEchec, gristId, accId: accessionCourante.id, etapeCode: codeEtapeParId(session.etape) });
+    scansSession.push({ code: accessionCourante.code, nom: accessionCourante.nomIntro, ok: true, echec: estEchec, gristId, accId: accessionCourante.id, etapeCode: etapeCode });
     mettreAJourCompteur(); flashEcran(estEchec ? "rouge" : "vert"); annulerScan();
   } catch(e) {
     scansSession.push({ code: accessionCourante.code, nom: accessionCourante.nomIntro, ok: false, echec: false });
