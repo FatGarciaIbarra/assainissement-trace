@@ -147,6 +147,7 @@ textarea { resize: vertical; min-height: 60px; }
           <div class="champs-acc" id="champs-communs">
             <div class="champs-acc-titre">Données complémentaires</div>
             <div class="champ" id="champ-nbApex" style="display:none"><label>Nombre d'apex traités <span class="requis">*</span></label><input type="number" id="scan-nbApex" min="0" placeholder="Ex : 20"></div>
+            <div class="champ" id="champ-nbApexLignes" style="display:none"><label>Nombre d'apex <span class="requis">*</span></label><input type="number" id="scan-nbApexLignes" min="1" placeholder="Ex : 12"></div>
             <div class="champ"><label>Commentaire</label><textarea id="scan-commentaire" placeholder="Observation…"></textarea></div>
           </div>
           <div class="btns-scan">
@@ -198,6 +199,10 @@ const PARTENAIRE_CONFIG = {
 // ════════════════════════════════════════════════
  
 const ETAPE_CRYOTHERAPIE = "B_CRYOTHERAPIE";
+const ETAPE_REGEN_MERISTE = "B_REGEN_MERISTE";
+const ETAPE_CROISSANCE_TUBE = "B_CROISSANCE";
+// Étapes où le champ simple "Nombre d'apex traités" s'affiche (une seule ligne Suivi2, valeur écrite dans NbApex).
+const ETAPES_NB_APEX_SIMPLE = [ETAPE_CRYOTHERAPIE, ETAPE_REGEN_MERISTE];
  
 let cacheAccessions = {}, cacheOperateurs = [], cacheEtapes = [];
 let cacheSuivi = [];
@@ -420,8 +425,10 @@ function rechercherAccession() {
     document.getElementById("scan-nomVar").textContent = acc.nomVar;
     document.getElementById("scan-info-bloc").style.display = "block";
     document.getElementById("scan-commentaire").value = "";
-    document.getElementById("champ-nbApex").style.display = (etapeCode === ETAPE_CRYOTHERAPIE) ? "" : "none";
+    document.getElementById("champ-nbApex").style.display = ETAPES_NB_APEX_SIMPLE.includes(etapeCode) ? "" : "none";
     document.getElementById("scan-nbApex").value = "";
+    document.getElementById("champ-nbApexLignes").style.display = (etapeCode === ETAPE_CROISSANCE_TUBE) ? "" : "none";
+    document.getElementById("scan-nbApexLignes").value = "";
     const alerteEchec = alerteEchecAnterieur(acc.id);
     if (alerteEchec) afficherAlerte("alerte-scan", alerteEchec, "info");
     setTimeout(() => document.getElementById("btn-confirmer").focus(), 50);
@@ -449,29 +456,47 @@ async function enregistrerScan(reussite) {
   if (!accessionCourante || enRegistrement) return;
   const etapeCode = codeEtapeParId(session.etape);
   let nbApex = null;
-  if (etapeCode === ETAPE_CRYOTHERAPIE) {
+  if (ETAPES_NB_APEX_SIMPLE.includes(etapeCode)) {
     nbApex = parseInt(document.getElementById("scan-nbApex").value);
     if (!nbApex && nbApex !== 0) return afficherAlerte("alerte-scan", "Nombre d'apex traités obligatoire.", "erreur");
+  }
+  let nbLignes = null;
+  if (etapeCode === ETAPE_CROISSANCE_TUBE) {
+    nbLignes = parseInt(document.getElementById("scan-nbApexLignes").value);
+    if (!nbLignes || nbLignes < 1) return afficherAlerte("alerte-scan", "Nombre d'apex obligatoire (au moins 1).", "erreur");
   }
   enRegistrement = true;
   const bc = document.getElementById("btn-confirmer"), be = document.getElementById("btn-echec");
   bc.disabled = be.disabled = true;
   if (reussite) be.innerHTML = 'Enregistrement <span class="spinner"></span>';
   else bc.innerHTML = 'Enregistrement <span class="spinner"></span>';
-  const fields = {
+  const fieldsBase = {
     CodeIntro: accessionCourante.id, Methode: session.methode, Etape: session.etape,
     Date: Math.floor(new Date(session.date).getTime() / 1000), Operateur: session.operateur,
     Emplacement: session.emplacement, CodePartenaire: session.codePartenaire
   };
   const commentaire = document.getElementById("scan-commentaire").value;
-  if (reussite)    fields.Reussite     = reussite;
-  if (commentaire) fields.Commentaires = commentaire;
-  if (etapeCode === ETAPE_CRYOTHERAPIE) fields.NbApex = nbApex;
+  if (reussite)    fieldsBase.Reussite     = reussite;
+  if (commentaire) fieldsBase.Commentaires = commentaire;
+  if (ETAPES_NB_APEX_SIMPLE.includes(etapeCode)) fieldsBase.NbApex = nbApex;
+  const estEchec = reussite === "Échec";
   try {
-    const result = await grist.docApi.applyUserActions([["AddRecord", "Suivi2", null, fields]]);
-    const gristId = result.retValues[0];
-    const estEchec = reussite === "Échec";
-    scansSession.push({ code: accessionCourante.code, nom: accessionCourante.nomIntro, ok: true, echec: estEchec, gristId, accId: accessionCourante.id, etapeCode: etapeCode });
+    if (etapeCode === ETAPE_CROISSANCE_TUBE) {
+      // Génère automatiquement une ligne Suivi2 par apex, numérotée CODE-M01, CODE-M02, …
+      // (même colonne CodeMicrogreffe que les microgreffes IFV), en un seul lot d'actions.
+      const actions = [];
+      for (let n = 1; n <= nbLignes; n++) {
+        const suffixe = String(n).padStart(2, "0");
+        actions.push(["AddRecord", "Suivi2", null, { ...fieldsBase, CodeMicrogreffe: `${accessionCourante.code}-M${suffixe}` }]);
+      }
+      const result = await grist.docApi.applyUserActions(actions);
+      const gristIds = result.retValues;
+      scansSession.push({ code: accessionCourante.code, nom: accessionCourante.nomIntro, ok: true, echec: estEchec, gristIds, accId: accessionCourante.id, etapeCode, nbLignes });
+    } else {
+      const result = await grist.docApi.applyUserActions([["AddRecord", "Suivi2", null, fieldsBase]]);
+      const gristId = result.retValues[0];
+      scansSession.push({ code: accessionCourante.code, nom: accessionCourante.nomIntro, ok: true, echec: estEchec, gristId, accId: accessionCourante.id, etapeCode });
+    }
     mettreAJourCompteur(); flashEcran(estEchec ? "rouge" : "vert"); annulerScan();
   } catch(e) {
     scansSession.push({ code: accessionCourante.code, nom: accessionCourante.nomIntro, ok: false, echec: false });
@@ -489,16 +514,24 @@ function mettreAJourCompteur() {
   document.getElementById("liste-scans").innerHTML = [...scansSession].map((s, i) => {
     let statut, cls;
     if (!s.ok) { statut="Erreur"; cls="err"; } else if (s.echec) { statut="Échec"; cls="echec"; } else { statut="OK"; cls="ok"; }
-    return `<div class="scan-item"><span class="scan-code">${s.code}</span><span class="scan-nom">${s.nom}</span><span class="scan-statut ${cls}">${statut}</span>${s.ok?`<button onclick="annulerDernierScan(${i})" style="background:none;border:none;cursor:pointer;color:var(--erreur);font-size:14px;padding:0 4px;">✕</button>`:""}</div>`;
+    const nomAffiche = s.nbLignes ? `${s.nom} (${s.nbLignes} apex)` : s.nom;
+    return `<div class="scan-item"><span class="scan-code">${s.code}</span><span class="scan-nom">${nomAffiche}</span><span class="scan-statut ${cls}">${statut}</span>${s.ok?`<button onclick="annulerDernierScan(${i})" style="background:none;border:none;cursor:pointer;color:var(--erreur);font-size:14px;padding:0 4px;">✕</button>`:""}</div>`;
   }).reverse().join("");
   document.getElementById("section-historique").style.display = "block";
 }
  
 async function annulerDernierScan(index) {
   const scan = scansSession[index];
-  if (!scan || !scan.gristId) return;
-  try { await grist.docApi.applyUserActions([["RemoveRecord", "Suivi2", scan.gristId]]); scansSession.splice(index, 1); mettreAJourCompteur(); }
-  catch(e) { afficherAlerte("alerte-scan", "Impossible d'annuler : " + e.message, "erreur"); }
+  if (!scan) return;
+  try {
+    if (scan.gristIds && scan.gristIds.length) {
+      // Croissance en tube : plusieurs lignes Suivi2 générées pour un seul scan, on les retire toutes ensemble.
+      await grist.docApi.applyUserActions(scan.gristIds.map(id => ["RemoveRecord", "Suivi2", id]));
+    } else if (scan.gristId) {
+      await grist.docApi.applyUserActions([["RemoveRecord", "Suivi2", scan.gristId]]);
+    } else return;
+    scansSession.splice(index, 1); mettreAJourCompteur();
+  } catch(e) { afficherAlerte("alerte-scan", "Impossible d'annuler : " + e.message, "erreur"); }
 }
  
 function flashEcran(couleur) { const el = document.getElementById("flash"); el.className = "flash-overlay " + couleur + " actif"; setTimeout(() => el.classList.remove("actif"), 350); }
