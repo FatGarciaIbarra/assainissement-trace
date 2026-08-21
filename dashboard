@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tableau de bord — Assainissement vigne</title>
+<!--
+  ════════════════════════════════════════════════
+  TABLEAU DE BORD — lecture seule, multi-partenaires
+  Lit Accessions / Suivi2 / Ref_Etapes / Operateurs.
+  N'écrit jamais dans Grist (grist.ready requiredAccess: "read table").
+  ════════════════════════════════════════════════
+-->
+<script src="https://grist.numerique.gouv.fr/grist-plugin-api.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --vert: #2d5a27; --vert-mid: #4a7c42; --vert-light: #f2f7f1;
+  --terre: #8b5e3c; --texte: #1a1a18; --texte-2: #5a5a54;
+  --bordure: #cdd8cb; --blanc: #fafaf8; --erreur: #c0392b; --succes: #27ae60; --avert: #b8860b;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'DM Mono', monospace; background: var(--blanc); color: var(--texte); min-height: 100vh; font-size: 13px; }
+.container { max-width: 1180px; margin: 0 auto; padding: 16px 18px 50px; }
+.chargement { text-align: center; padding: 40px; color: var(--texte-2); font-size: 13px; }
+.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--bordure); border-top-color: var(--vert); border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-left: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+h1 { font-size: 15px; color: var(--vert); margin-bottom: 2px; }
+.sous-titre { font-size: 11px; color: var(--texte-2); margin-bottom: 14px; }
+.onglets { display: flex; gap: 4px; border-bottom: 1px solid var(--bordure); margin-bottom: 14px; flex-wrap: wrap; }
+.onglet { padding: 8px 14px; font-family: inherit; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; background: none; border: none; border-bottom: 2px solid transparent; color: var(--texte-2); cursor: pointer; }
+.onglet.actif { color: var(--vert); border-bottom-color: var(--vert); font-weight: 500; }
+.onglet:hover { color: var(--vert-mid); }
+.vue { display: none; }
+.vue.actif { display: block; }
+.cartes { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 18px; }
+.carte { background: #fff; border: 1px solid var(--bordure); border-radius: 8px; padding: 12px 14px; }
+.carte-valeur { font-size: 22px; color: var(--vert); font-weight: 500; }
+.carte-label { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--texte-2); margin-top: 2px; }
+.carte.alerte .carte-valeur { color: var(--erreur); }
+.section-titre { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--vert); font-weight: 500; margin: 18px 0 8px; }
+.section-titre:first-child { margin-top: 0; }
+.filtres { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; align-items: center; background: var(--vert-light); border: 1px solid var(--bordure); border-radius: 6px; padding: 10px 12px; }
+.filtres label { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--texte-2); margin-right: 4px; }
+.filtres select, .filtres input[type="text"] {
+  font-family: inherit; font-size: 12px; padding: 5px 8px; border: 1px solid var(--bordure); border-radius: 4px;
+  background: #fff; color: var(--texte);
+}
+.filtres .spacer { flex: 1; }
+.btn-export {
+  font-family: inherit; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; padding: 7px 12px;
+  border-radius: 5px; border: 1px solid var(--vert); background: #fff; color: var(--vert); cursor: pointer; font-weight: 500;
+}
+.btn-export:hover { background: var(--vert-light); }
+.btn-reset {
+  font-family: inherit; font-size: 11px; padding: 6px 10px; border-radius: 5px; border: 1px solid var(--bordure);
+  background: #fff; color: var(--texte-2); cursor: pointer;
+}
+.btn-reset:hover { color: var(--erreur); border-color: var(--erreur); }
+table { width: 100%; border-collapse: collapse; font-size: 12px; background: #fff; }
+thead th {
+  text-align: left; padding: 8px 10px; background: var(--vert-light); border-bottom: 1px solid var(--bordure);
+  font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--vert); cursor: pointer; white-space: nowrap;
+}
+thead th:hover { color: var(--vert-mid); }
+tbody td { padding: 7px 10px; border-bottom: 1px solid var(--vert-light); vertical-align: top; }
+tbody tr:hover { background: var(--vert-light); }
+.tableau-scroll { overflow-x: auto; border: 1px solid var(--bordure); border-radius: 6px; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 10px; letter-spacing: 0.04em; white-space: nowrap; }
+.badge.encours   { background: #eef3fb; color: #2b5fa8; }
+.badge.termine   { background: #edfaf2; color: var(--succes); }
+.badge.echec     { background: #fdf0ef; color: var(--erreur); }
+.badge.nonrecu   { background: #f4f2ed; color: var(--texte-2); }
+.badge.stocke    { background: #fff7e6; color: var(--avert); }
+.vide { padding: 24px; text-align: center; color: var(--texte-2); font-size: 12px; }
+.compte-lignes { font-size: 11px; color: var(--texte-2); margin: 8px 2px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div id="ecran-chargement" class="chargement">Connexion à Grist <span class="spinner"></span></div>
+
+  <div id="ecran-principal" style="display:none">
+    <h1>Tableau de bord — Assainissement vigne</h1>
+    <div class="sous-titre">Lecture seule · toutes campagnes et partenaires confondus · données Suivi2/Accessions</div>
+
+    <div class="onglets">
+      <button class="onglet actif" data-onglet="vue">Vue d'ensemble</button>
+      <button class="onglet" data-onglet="accessions">Accessions</button>
+      <button class="onglet" data-onglet="tubes">Tubes &amp; boutures</button>
+      <button class="onglet" data-onglet="alertes">Alertes</button>
+    </div>
+
+    <!-- ═══ VUE D'ENSEMBLE ═══ -->
+    <div class="vue actif" id="vue-vue">
+      <div class="cartes" id="cartes-ensemble"></div>
+      <div class="section-titre">Accessions par partenaire titulaire × campagne</div>
+      <div class="tableau-scroll"><table id="table-partenaire-campagne"></table></div>
+    </div>
+
+    <!-- ═══ ACCESSIONS ═══ -->
+    <div class="vue" id="vue-accessions">
+      <div class="filtres">
+        <div><label>Recherche</label><input type="text" id="f-acc-recherche" placeholder="Code intro…"></div>
+        <div><label>Partenaire</label><select id="f-acc-partenaire"><option value="">Tous</option></select></div>
+        <div><label>Campagne</label><select id="f-acc-campagne"><option value="">Toutes</option></select></div>
+        <div><label>Type</label><select id="f-acc-type"><option value="">Tous</option></select></div>
+        <div><label>Statut</label><select id="f-acc-statut"><option value="">Tous</option></select></div>
+        <div><label>Court-noué</label><select id="f-acc-v1"><option value="">Tous</option></select></div>
+        <div><label>Enroulement</label><select id="f-acc-v2"><option value="">Tous</option></select></div>
+        <div><label>Marbrure/Corky/Cann.</label><select id="f-acc-v3"><option value="">Tous</option></select></div>
+        <div class="spacer"></div>
+        <button class="btn-reset" onclick="reinitialiserFiltres('acc')">Réinitialiser</button>
+        <button class="btn-export" onclick="exporterOnglet('accessions')">Exporter CSV</button>
+      </div>
+      <div class="compte-lignes" id="compte-accessions"></div>
+      <div class="tableau-scroll"><table id="table-accessions"></table></div>
+    </div>
+
+    <!-- ═══ TUBES & BOUTURES ═══ -->
+    <div class="vue" id="vue-tubes">
+      <div class="filtres">
+        <div><label>Recherche</label><input type="text" id="f-tube-recherche" placeholder="Code intro ou code tube…"></div>
+        <div><label>Partenaire</label><select id="f-tube-partenaire"><option value="">Tous</option></select></div>
+        <div><label>Campagne</label><select id="f-tube-campagne"><option value="">Toutes</option></select></div>
+        <div><label>Type</label><select id="f-tube-type">
+          <option value="">Tous</option><option value="Tube/Microgreffe">Tube/Microgreffe</option><option value="Bouture/Microbouture">Bouture/Microbouture</option>
+        </select></div>
+        <div><label>Statut</label><select id="f-tube-statut"><option value="">Tous</option></select></div>
+        <div class="spacer"></div>
+        <button class="btn-reset" onclick="reinitialiserFiltres('tube')">Réinitialiser</button>
+        <button class="btn-export" onclick="exporterOnglet('tubes')">Exporter CSV</button>
+      </div>
+      <div class="compte-lignes" id="compte-tubes"></div>
+      <div class="tableau-scroll"><table id="table-tubes"></table></div>
+    </div>
+
+    <!-- ═══ ALERTES ═══ -->
+    <div class="vue" id="vue-alertes">
+      <div class="section-titre">Dernière action en échec / non conforme (accessions)</div>
+      <div class="tableau-scroll"><table id="table-alertes-echecs"></table></div>
+      <div class="section-titre">Tubes / boutures sans état terminal (ni stocké, ni transmis, ni mort)</div>
+      <div class="sous-titre" style="margin-bottom:8px">Règle de contrôle de complétude — voir README. Une présence ici n'est pas forcément anormale (le suivi peut être simplement en cours), mais mérite vérification si ancien.</div>
+      <div class="tableau-scroll"><table id="table-alertes-orphelins"></table></div>
+      <div style="margin-top:12px"><button class="btn-export" onclick="exporterOnglet('alertes')">Exporter CSV (les deux listes)</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════
+//  IDENTIFIANTS DE COLONNES GRIST (à ajuster ici si le schéma change)
+// ════════════════════════════════════════════════
+const COL_VIROSE_1 = "Virose_court-noue";
+const COL_VIROSE_2 = "Virose_enroule";
+const COL_VIROSE_3 = "Virose_marb_cork_cann";
+
+const ETAPE_STOCKAGE = "STOCKAGE";
+const ETAPE_TRANSMISSION = "F_TRANSMISSION_INRAE";
+const ETAPE_RECEPTION = "RECEPTION";
+const ETAPE_CHGT_METHODE = "CHGT_METHODE";
+const REUSSITES_ECHEC = ["Échec", "Non conforme"];
+
+let cacheOperateurs = {}, cacheEtapes = {}, cacheAccessions = [], cacheSuivi = [];
+let ongletActif = "vue";
+
+grist.ready({ requiredAccess: "read table" });
+
+async function init() {
+  await chargerDonnees();
+  document.getElementById("ecran-chargement").style.display = "none";
+  document.getElementById("ecran-principal").style.display = "block";
+  initFiltres();
+  document.querySelectorAll(".onglet").forEach(b => b.addEventListener("click", () => basculerOnglet(b.dataset.onglet)));
+  document.querySelectorAll(".filtres select, .filtres input").forEach(el => el.addEventListener("input", rafraichirTout));
+  rafraichirTout();
+}
+window.addEventListener("load", init);
+
+async function chargerDonnees() {
+  const [ops, etapes, accs, suivi] = await Promise.all([
+    grist.docApi.fetchTable("Operateurs"),
+    grist.docApi.fetchTable("Ref_Etapes"),
+    grist.docApi.fetchTable("Accessions"),
+    grist.docApi.fetchTable("Suivi2")
+  ]);
+
+  cacheOperateurs = {};
+  ops.id.forEach((id, i) => { cacheOperateurs[id] = ops.NomOperateur[i] || "—"; });
+
+  cacheEtapes = {};
+  etapes.id.forEach((id, i) => {
+    cacheEtapes[id] = { code: etapes.CodeEtape[i], nom: etapes.NomEtape[i], methode: etapes.Methode[i], ordre: etapes.OrdreAffichage[i] };
+  });
+
+  cacheAccessions = accs.id.map((id, i) => ({
+    id,
+    codeIntro: accs.CodeIntro[i] || "—",
+    nomIntro: accs.NomIntro[i] || "—",
+    nomVar: accs.NomVar[i] || "—",
+    campagne: accs.Campagne[i] || "—",
+    type: accs.Type ? (accs.Type[i] || "—") : "—",
+    virose1: accs[COL_VIROSE_1] ? (accs[COL_VIROSE_1][i] || "—") : "—",
+    virose2: accs[COL_VIROSE_2] ? (accs[COL_VIROSE_2][i] || "—") : "—",
+    virose3: accs[COL_VIROSE_3] ? (accs[COL_VIROSE_3][i] || "—") : "—"
+  }));
+
+  cacheSuivi = suivi.id.map((id, i) => ({
+    id,
+    codeIntroId: suivi.CodeIntro[i],
+    etapeId: suivi.Etape[i],
+    date: suivi.Date[i],
+    operateurId: suivi.Operateur[i],
+    emplacement: suivi.Emplacement[i],
+    codePartenaire: suivi.CodePartenaire[i],
+    reussite: suivi.Reussite[i],
+    commentaires: suivi.Commentaires ? suivi.Commentaires[i] : null,
+    codeMicrogreffe: suivi.CodeMicrogreffe ? suivi.CodeMicrogreffe[i] : null
+  }));
+}
+
+function codeEtape(etapeId) { return cacheEtapes[etapeId] ? cacheEtapes[etapeId].code : null; }
+function nomEtape(etapeId)  { return cacheEtapes[etapeId] ? cacheEtapes[etapeId].nom  : (etapeId ? String(etapeId) : "—"); }
+function nomOperateur(id)   { return cacheOperateurs[id] || "—"; }
+function formatDate(ts)     { if (!ts) return "—"; const d = new Date(ts * 1000); return d.toLocaleDateString("fr-FR"); }
+
+// ── Historique / statut par accession (toutes campagnes traitées comme des lignes indépendantes) ──
+function historiqueAccession(accId) {
+  return cacheSuivi.filter(r => r.codeIntroId === accId).sort((a,b) => a.date - b.date || a.id - b.id);
+}
+
+// Réplique la logique "partenaireActuel" des formulaires INRAE (partenaire titulaire courant),
+// généralisée à tous les partenaires : dernière RECEPTION réussie, tant qu'aucun CHGT_METHODE
+// n'a eu lieu depuis.
+function partenaireTitulaire(accId) {
+  const hist = historiqueAccession(accId);
+  const receptions = hist.filter(r => codeEtape(r.etapeId) === ETAPE_RECEPTION && !REUSSITES_ECHEC.includes(r.reussite));
+  if (receptions.length === 0) return null;
+  const derniereReception = receptions[receptions.length - 1];
+  const chgtApres = hist.some(r => codeEtape(r.etapeId) === ETAPE_CHGT_METHODE &&
+    (r.date > derniereReception.date || (r.date === derniereReception.date && r.id > derniereReception.id)));
+  return chgtApres ? null : derniereReception.codePartenaire;
+}
+
+function statutAccession(acc) {
+  const hist = historiqueAccession(acc.id);
+  if (hist.length === 0) {
+    return { statut: "Non réceptionné", derniereEtape: "—", derniereDate: null, dernierPartenaire: "—", titulaire: "—" };
+  }
+  const dernier = [...hist].sort((a,b) => b.date - a.date || b.id - a.id)[0];
+  const estEchec = REUSSITES_ECHEC.includes(dernier.reussite);
+  const titulaire = partenaireTitulaire(acc.id);
+  return {
+    statut: estEchec ? "Échec / Non conforme" : "En cours",
+    derniereEtape: nomEtape(dernier.etapeId),
+    derniereDate: dernier.date,
+    dernierPartenaire: dernier.codePartenaire || "—",
+    titulaire: titulaire || "—"
+  };
+}
+
+// ── Tubes / microgreffes / boutures : regroupés par (accession, code composite) ──
+function construireTubes() {
+  const map = new Map();
+  cacheSuivi.forEach(r => {
+    if (!r.codeMicrogreffe) return;
+    const cle = r.codeIntroId + "::" + r.codeMicrogreffe;
+    if (!map.has(cle)) map.set(cle, { codeIntroId: r.codeIntroId, code: r.codeMicrogreffe, lignes: [] });
+    map.get(cle).lignes.push(r);
+  });
+  return [...map.values()].map(t => {
+    const tri = [...t.lignes].sort((a,b) => b.date - a.date || b.id - a.id);
+    const dernier = tri[0];
+    const stocke = t.lignes.some(r => codeEtape(r.etapeId) === ETAPE_STOCKAGE);
+    const transmis = t.lignes.some(r => codeEtape(r.etapeId) === ETAPE_TRANSMISSION);
+    const mort = REUSSITES_ECHEC.includes(dernier.reussite);
+    let statut = "En cours";
+    if (mort) statut = "Mort (échec/non conforme)";
+    else if (transmis) statut = "Transmis";
+    else if (stocke) statut = "Stocké";
+    return {
+      codeIntroId: t.codeIntroId,
+      code: t.code,
+      typeCode: t.code.includes("-MB") ? "Bouture/Microbouture" : "Tube/Microgreffe",
+      statut,
+      derniereEtape: nomEtape(dernier.etapeId),
+      derniereDate: dernier.date,
+      dernierPartenaire: dernier.codePartenaire || "—"
+    };
+  });
+}
+
+function accessionParId(id) { return cacheAccessions.find(a => a.id === id); }
+
+// ── Filtres : peuplement dynamique des options à partir des données réelles ──
+function optionsUniques(arr) { return [...new Set(arr.filter(v => v !== null && v !== undefined && v !== "—"))].sort(); }
+
+function initFiltres() {
+  const partenaires = optionsUniques(cacheSuivi.map(r => r.codePartenaire));
+  const campagnes = optionsUniques(cacheAccessions.map(a => a.campagne));
+  const types = optionsUniques(cacheAccessions.map(a => a.type));
+  const v1 = optionsUniques(cacheAccessions.map(a => a.virose1));
+  const v2 = optionsUniques(cacheAccessions.map(a => a.virose2));
+  const v3 = optionsUniques(cacheAccessions.map(a => a.virose3));
+  const statuts = ["Non réceptionné", "En cours", "Échec / Non conforme"];
+  const statutsTubes = ["En cours", "Stocké", "Transmis", "Mort (échec/non conforme)"];
+
+  remplirSelect("f-acc-partenaire", partenaires);
+  remplirSelect("f-acc-campagne", campagnes);
+  remplirSelect("f-acc-type", types);
+  remplirSelect("f-acc-statut", statuts);
+  remplirSelect("f-acc-v1", v1);
+  remplirSelect("f-acc-v2", v2);
+  remplirSelect("f-acc-v3", v3);
+
+  remplirSelect("f-tube-partenaire", partenaires);
+  remplirSelect("f-tube-campagne", campagnes);
+  remplirSelect("f-tube-statut", statutsTubes);
+}
+
+function remplirSelect(id, valeurs) {
+  const sel = document.getElementById(id);
+  const courant = sel.value;
+  const premiereOption = sel.options[0];
+  sel.innerHTML = "";
+  sel.appendChild(premiereOption);
+  valeurs.forEach(v => { const o = document.createElement("option"); o.value = v; o.textContent = v; sel.appendChild(o); });
+  if (valeurs.includes(courant)) sel.value = courant;
+}
+
+function reinitialiserFiltres(prefixe) {
+  document.querySelectorAll(`[id^="f-${prefixe}-"]`).forEach(el => { el.value = ""; });
+  rafraichirTout();
+}
+
+function basculerOnglet(nom) {
+  ongletActif = nom;
+  document.querySelectorAll(".onglet").forEach(b => b.classList.toggle("actif", b.dataset.onglet === nom));
+  document.querySelectorAll(".vue").forEach(v => v.classList.remove("actif"));
+  document.getElementById("vue-" + nom).classList.add("actif");
+}
+
+// ── Construction des lignes filtrées (réutilisées par le rendu et l'export CSV) ──
+function lignesAccessionsFiltrees() {
+  const recherche = document.getElementById("f-acc-recherche").value.trim().toUpperCase();
+  const fPartenaire = document.getElementById("f-acc-partenaire").value;
+  const fCampagne = document.getElementById("f-acc-campagne").value;
+  const fType = document.getElementById("f-acc-type").value;
+  const fStatut = document.getElementById("f-acc-statut").value;
+  const fV1 = document.getElementById("f-acc-v1").value;
+  const fV2 = document.getElementById("f-acc-v2").value;
+  const fV3 = document.getElementById("f-acc-v3").value;
+
+  return cacheAccessions
+    .map(acc => ({ acc, s: statutAccession(acc) }))
+    .filter(({ acc, s }) => {
+      if (recherche && !acc.codeIntro.toUpperCase().includes(recherche)) return false;
+      if (fPartenaire && s.titulaire !== fPartenaire && s.dernierPartenaire !== fPartenaire) return false;
+      if (fCampagne && acc.campagne !== fCampagne) return false;
+      if (fType && acc.type !== fType) return false;
+      if (fStatut && s.statut !== fStatut) return false;
+      if (fV1 && acc.virose1 !== fV1) return false;
+      if (fV2 && acc.virose2 !== fV2) return false;
+      if (fV3 && acc.virose3 !== fV3) return false;
+      return true;
+    })
+    .map(({ acc, s }) => ({
+      codeIntro: acc.codeIntro, nomIntro: acc.nomIntro, nomVar: acc.nomVar, campagne: acc.campagne, type: acc.type,
+      virose1: acc.virose1, virose2: acc.virose2, virose3: acc.virose3,
+      titulaire: s.titulaire, statut: s.statut, derniereEtape: s.derniereEtape,
+      derniereDate: formatDate(s.derniereDate)
+    }));
+}
+
+function lignesTubesFiltrees() {
+  const recherche = document.getElementById("f-tube-recherche").value.trim().toUpperCase();
+  const fPartenaire = document.getElementById("f-tube-partenaire").value;
+  const fCampagne = document.getElementById("f-tube-campagne").value;
+  const fType = document.getElementById("f-tube-type").value;
+  const fStatut = document.getElementById("f-tube-statut").value;
+
+  return construireTubes()
+    .map(t => ({ t, acc: accessionParId(t.codeIntroId) }))
+    .filter(({ t, acc }) => {
+      if (!acc) return false;
+      if (recherche && !(acc.codeIntro.toUpperCase().includes(recherche) || t.code.toUpperCase().includes(recherche))) return false;
+      if (fPartenaire && t.dernierPartenaire !== fPartenaire) return false;
+      if (fCampagne && acc.campagne !== fCampagne) return false;
+      if (fType && t.typeCode !== fType) return false;
+      if (fStatut && t.statut !== fStatut) return false;
+      return true;
+    })
+    .map(({ t, acc }) => ({
+      codeIntro: acc.codeIntro, code: t.code, typeCode: t.typeCode, statut: t.statut,
+      derniereEtape: t.derniereEtape, derniereDate: formatDate(t.derniereDate), partenaire: t.dernierPartenaire
+    }));
+}
+
+// ── Rendu ──
+function classeBadge(statut) {
+  if (statut === "En cours") return "encours";
+  if (statut === "Stocké") return "stocke";
+  if (statut === "Transmis") return "termine";
+  if (statut === "Non réceptionné") return "nonrecu";
+  return "echec"; // Échec / Non conforme / Mort
+}
+
+function rafraichirTout() {
+  rendreVueEnsemble();
+  rendreAccessions();
+  rendreTubes();
+  rendreAlertes();
+}
+
+function rendreVueEnsemble() {
+  const statuts = cacheAccessions.map(statutAccession);
+  const nbTotal = cacheAccessions.length;
+  const nbEnCours = statuts.filter(s => s.statut === "En cours").length;
+  const nbEchec = statuts.filter(s => s.statut === "Échec / Non conforme").length;
+  const nbNonRecu = statuts.filter(s => s.statut === "Non réceptionné").length;
+  const tubes = construireTubes();
+  const nbTubesEnCours = tubes.filter(t => t.statut === "En cours").length;
+
+  document.getElementById("cartes-ensemble").innerHTML = `
+    <div class="carte"><div class="carte-valeur">${nbTotal}</div><div class="carte-label">Accessions (toutes campagnes)</div></div>
+    <div class="carte"><div class="carte-valeur">${nbEnCours}</div><div class="carte-label">En cours</div></div>
+    <div class="carte alerte"><div class="carte-valeur">${nbEchec}</div><div class="carte-label">Échec / non conforme (dernière action)</div></div>
+    <div class="carte"><div class="carte-valeur">${nbNonRecu}</div><div class="carte-label">Non réceptionnées</div></div>
+    <div class="carte"><div class="carte-valeur">${tubes.length}</div><div class="carte-label">Tubes/boutures créés</div></div>
+    <div class="carte alerte"><div class="carte-valeur">${nbTubesEnCours}</div><div class="carte-label">Tubes/boutures sans état terminal</div></div>
+  `;
+
+  const combinaisons = new Map();
+  cacheAccessions.forEach(acc => {
+    const s = statutAccession(acc);
+    const partenaire = s.titulaire !== "—" ? s.titulaire : (s.dernierPartenaire !== "—" ? s.dernierPartenaire : "(aucun)");
+    const cle = partenaire + "::" + acc.campagne;
+    combinaisons.set(cle, (combinaisons.get(cle) || 0) + 1);
+  });
+  const lignes = [...combinaisons.entries()].map(([cle, n]) => { const [p, c] = cle.split("::"); return { p, c, n }; })
+    .sort((a,b) => a.p.localeCompare(b.p) || a.c.localeCompare(b.c));
+  document.getElementById("table-partenaire-campagne").innerHTML =
+    `<thead><tr><th>Partenaire</th><th>Campagne</th><th>Accessions</th></tr></thead><tbody>` +
+    (lignes.length ? lignes.map(l => `<tr><td>${l.p}</td><td>${l.c}</td><td>${l.n}</td></tr>`).join("") : `<tr><td colspan="3" class="vide">Aucune donnée</td></tr>`) +
+    `</tbody>`;
+}
+
+function rendreAccessions() {
+  const lignes = lignesAccessionsFiltrees();
+  document.getElementById("compte-accessions").textContent = `${lignes.length} accession(s)`;
+  document.getElementById("table-accessions").innerHTML =
+    `<thead><tr>
+      <th>Code intro</th><th>Nom intro</th><th>Nom variété</th><th>Campagne</th><th>Type</th>
+      <th>Court-noué</th><th>Enroulement</th><th>Marbrure/Corky/Cann.</th>
+      <th>Partenaire titulaire</th><th>Statut</th><th>Dernière étape</th><th>Dernière date</th>
+    </tr></thead><tbody>` +
+    (lignes.length ? lignes.map(l => `<tr>
+      <td>${l.codeIntro}</td><td>${l.nomIntro}</td><td>${l.nomVar}</td><td>${l.campagne}</td><td>${l.type}</td>
+      <td>${l.virose1}</td><td>${l.virose2}</td><td>${l.virose3}</td>
+      <td>${l.titulaire}</td><td><span class="badge ${classeBadge(l.statut)}">${l.statut}</span></td>
+      <td>${l.derniereEtape}</td><td>${l.derniereDate}</td>
+    </tr>`).join("") : `<tr><td colspan="12" class="vide">Aucune accession ne correspond aux filtres</td></tr>`) +
+    `</tbody>`;
+}
+
+function rendreTubes() {
+  const lignes = lignesTubesFiltrees();
+  document.getElementById("compte-tubes").textContent = `${lignes.length} tube(s)/bouture(s)`;
+  document.getElementById("table-tubes").innerHTML =
+    `<thead><tr><th>Code intro</th><th>Code</th><th>Type</th><th>Statut</th><th>Dernière étape</th><th>Dernière date</th><th>Partenaire</th></tr></thead><tbody>` +
+    (lignes.length ? lignes.map(l => `<tr>
+      <td>${l.codeIntro}</td><td>${l.code}</td><td>${l.typeCode}</td>
+      <td><span class="badge ${classeBadge(l.statut)}">${l.statut}</span></td>
+      <td>${l.derniereEtape}</td><td>${l.derniereDate}</td><td>${l.partenaire}</td>
+    </tr>`).join("") : `<tr><td colspan="7" class="vide">Aucun tube ne correspond aux filtres</td></tr>`) +
+    `</tbody>`;
+}
+
+function rendreAlertes() {
+  const echecsAcc = cacheAccessions.map(acc => ({ acc, s: statutAccession(acc) })).filter(({ s }) => s.statut === "Échec / Non conforme")
+    .map(({ acc, s }) => ({ codeIntro: acc.codeIntro, campagne: acc.campagne, derniereEtape: s.derniereEtape, derniereDate: formatDate(s.derniereDate), partenaire: s.dernierPartenaire }));
+  document.getElementById("table-alertes-echecs").innerHTML =
+    `<thead><tr><th>Code intro</th><th>Campagne</th><th>Dernière étape</th><th>Dernière date</th><th>Partenaire</th></tr></thead><tbody>` +
+    (echecsAcc.length ? echecsAcc.map(l => `<tr><td>${l.codeIntro}</td><td>${l.campagne}</td><td>${l.derniereEtape}</td><td>${l.derniereDate}</td><td>${l.partenaire}</td></tr>`).join("")
+      : `<tr><td colspan="5" class="vide">Aucun échec/non-conformité en dernière action</td></tr>`) +
+    `</tbody>`;
+
+  const orphelins = construireTubes().filter(t => t.statut === "En cours").map(t => {
+    const acc = accessionParId(t.codeIntroId);
+    return { codeIntro: acc ? acc.codeIntro : "—", campagne: acc ? acc.campagne : "—", code: t.code, typeCode: t.typeCode, derniereEtape: t.derniereEtape, derniereDate: formatDate(t.derniereDate), partenaire: t.dernierPartenaire };
+  });
+  document.getElementById("table-alertes-orphelins").innerHTML =
+    `<thead><tr><th>Code intro</th><th>Campagne</th><th>Code</th><th>Type</th><th>Dernière étape</th><th>Dernière date</th><th>Partenaire</th></tr></thead><tbody>` +
+    (orphelins.length ? orphelins.map(l => `<tr><td>${l.codeIntro}</td><td>${l.campagne}</td><td>${l.code}</td><td>${l.typeCode}</td><td>${l.derniereEtape}</td><td>${l.derniereDate}</td><td>${l.partenaire}</td></tr>`).join("")
+      : `<tr><td colspan="7" class="vide">Aucun tube/bouture sans état terminal</td></tr>`) +
+    `</tbody>`;
+}
+
+// ── Export CSV (séparateur ";" + BOM UTF-8 pour compatibilité Excel FR) ──
+function echapperCSV(v) {
+  if (v === null || v === undefined) return "";
+  const s = String(v).replace(/"/g, '""');
+  return /[;"\n]/.test(s) ? `"${s}"` : s;
+}
+function telechargerCSV(nomFichier, colonnes, lignes) {
+  const entete = colonnes.map(c => echapperCSV(c.label)).join(";");
+  const corps = lignes.map(l => colonnes.map(c => echapperCSV(l[c.key])).join(";")).join("\n");
+  const contenu = "﻿" + entete + "\n" + corps;
+  const blob = new Blob([contenu], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = nomFichier;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function exporterOnglet(nom) {
+  const horodatage = new Date().toISOString().slice(0, 10);
+  if (nom === "accessions") {
+    telechargerCSV(`accessions_${horodatage}.csv`, [
+      { key: "codeIntro", label: "Code intro" }, { key: "nomIntro", label: "Nom intro" }, { key: "nomVar", label: "Nom variété" },
+      { key: "campagne", label: "Campagne" }, { key: "type", label: "Type" },
+      { key: "virose1", label: "Court-noué" }, { key: "virose2", label: "Enroulement" }, { key: "virose3", label: "Marbrure/Corky/Cann." },
+      { key: "titulaire", label: "Partenaire titulaire" }, { key: "statut", label: "Statut" },
+      { key: "derniereEtape", label: "Dernière étape" }, { key: "derniereDate", label: "Dernière date" }
+    ], lignesAccessionsFiltrees());
+  } else if (nom === "tubes") {
+    telechargerCSV(`tubes_boutures_${horodatage}.csv`, [
+      { key: "codeIntro", label: "Code intro" }, { key: "code", label: "Code" }, { key: "typeCode", label: "Type" },
+      { key: "statut", label: "Statut" }, { key: "derniereEtape", label: "Dernière étape" }, { key: "derniereDate", label: "Dernière date" },
+      { key: "partenaire", label: "Partenaire" }
+    ], lignesTubesFiltrees());
+  } else if (nom === "alertes") {
+    const echecsAcc = cacheAccessions.map(acc => ({ acc, s: statutAccession(acc) })).filter(({ s }) => s.statut === "Échec / Non conforme")
+      .map(({ acc, s }) => ({ liste: "Échec/non conforme", codeIntro: acc.codeIntro, campagne: acc.campagne, code: "—", typeCode: "—", derniereEtape: s.derniereEtape, derniereDate: formatDate(s.derniereDate), partenaire: s.dernierPartenaire }));
+    const orphelins = construireTubes().filter(t => t.statut === "En cours").map(t => {
+      const acc = accessionParId(t.codeIntroId);
+      return { liste: "Sans état terminal", codeIntro: acc ? acc.codeIntro : "—", campagne: acc ? acc.campagne : "—", code: t.code, typeCode: t.typeCode, derniereEtape: t.derniereEtape, derniereDate: formatDate(t.derniereDate), partenaire: t.dernierPartenaire };
+    });
+    telechargerCSV(`alertes_${horodatage}.csv`, [
+      { key: "liste", label: "Type d'alerte" }, { key: "codeIntro", label: "Code intro" }, { key: "campagne", label: "Campagne" },
+      { key: "code", label: "Code tube/bouture" }, { key: "typeCode", label: "Type" },
+      { key: "derniereEtape", label: "Dernière étape" }, { key: "derniereDate", label: "Dernière date" }, { key: "partenaire", label: "Partenaire" }
+    ], [...echecsAcc, ...orphelins]);
+  }
+}
+</script>
+</body>
+</html>
