@@ -167,13 +167,24 @@ let ongletActif = "vue";
 grist.ready({ requiredAccess: "read table" });
 
 async function init() {
-  await chargerDonnees();
-  document.getElementById("ecran-chargement").style.display = "none";
-  document.getElementById("ecran-principal").style.display = "block";
-  initFiltres();
-  document.querySelectorAll(".onglet").forEach(b => b.addEventListener("click", () => basculerOnglet(b.dataset.onglet)));
-  document.querySelectorAll(".filtres select, .filtres input").forEach(el => el.addEventListener("input", rafraichirTout));
-  rafraichirTout();
+  try {
+    await chargerDonnees();
+    document.getElementById("ecran-chargement").style.display = "none";
+    document.getElementById("ecran-principal").style.display = "block";
+    initFiltres();
+    document.querySelectorAll(".onglet").forEach(b => b.addEventListener("click", () => basculerOnglet(b.dataset.onglet)));
+    document.querySelectorAll(".filtres select, .filtres input").forEach(el => el.addEventListener("input", rafraichirTout));
+    rafraichirTout();
+  } catch (e) {
+    document.getElementById("ecran-chargement").innerHTML =
+      `<div style="color:var(--erreur);text-align:left;max-width:520px;margin:0 auto">
+        <strong>Erreur de chargement :</strong><br>${e.message || e}<br><br>
+        Vérifier : nom exact des tables (Operateurs, Ref_Etapes, Accessions, Suivi2) et des colonnes
+        (Type, Virose_court-noue, Virose_enroule, Virose_marb_cork_cann), et que l'accès du widget
+        est bien "Read selected table" ou "Read all tables".
+      </div>`;
+    console.error("Erreur dashboard :", e);
+  }
 }
 window.addEventListener("load", init);
 
