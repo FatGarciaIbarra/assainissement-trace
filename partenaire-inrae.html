@@ -1,5 +1,3 @@
-
-Partenaire inrae assainissement · TXT
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -137,6 +135,17 @@ textarea { resize: vertical; min-height: 60px; }
       <div class="session-compteur" id="badge-compteur">0 scan</div>
     </div>
     <div id="alerte-scan" class="alerte"></div>
+    <div class="section">
+      <div class="section-titre">Importer un fichier CSV <span style="font-weight:400;text-transform:none;letter-spacing:0;opacity:0.75">(alternative au scan)</span></div>
+      <div class="section-corps">
+        <div class="champ"><label>Fichier</label><input type="file" id="import-fichier" accept=".csv"></div>
+        <div style="font-size:11px;color:var(--texte-2);margin-bottom:10px;line-height:1.6">
+          Colonnes : <strong>Code</strong> (obligatoire — code intro, ou <code>CODE-M01</code> pour Multiplication/Contrôle), <strong>Nombre</strong> (Croissance en tube / Multiplication uniquement), <strong>Reussite</strong> (vide = confirmé/conforme, sinon <code>Echec</code>, <code>NonConforme</code> ou <code>Conforme</code>), <strong>NbApex</strong> (Cryothérapie / Régénération méristèmes uniquement), <strong>Commentaire</strong>. Séparateur <code>,</code> ou <code>;</code>. Les mêmes règles que le scan manuel s'appliquent (continuité partenaire, doublons) — les lignes rejetées sont listées après import, sans bloquer les autres.
+        </div>
+        <div class="btns"><button class="btn btn-principal" id="btn-import" onclick="importerCSV()">Importer</button></div>
+        <div id="resultat-import"></div>
+      </div>
+    </div>
     <div class="section">
       <div class="section-titre">Scanner une accession</div>
       <div class="section-corps">
@@ -345,7 +354,7 @@ function verifierContinuitePartenaire(accId, etapeCode) {
  
   if (!titulaire) return `Cette accession n'a pas encore été réceptionnée. Elle doit d'abord passer par l'étape Réception.`;
   if (titulaire === session.codePartenaire) return null;
-  return `Cette accession est actuellement suivie par ${titulaire}. Un changement de méthode est requis avant qu'un autre partenaire n'intervienne.`;
+  return `Cette accession est actuellement suivie par ${titulaire}. Un changement de méthode (CHGT_METHODE) est requis avant qu'un autre partenaire n'intervienne.`;
 }
  
 // ── Vérifie qu'on ne réenregistre pas deux fois la même accession à la même étape ──
@@ -558,6 +567,185 @@ function annulerScan() {
   document.getElementById("scan-info-bloc").style.display = "none";
   masquerAlerte("alerte-scan");
   document.getElementById("scan-code").focus();
+}
+ 
+// ════════════════════════════════════════════════
+//  IMPORT CSV — alternative au scan répété (session sans accès terrain au formulaire)
+//  Réutilise les mêmes fonctions de validation que le scan manuel (trouverAccession,
+//  verifierContinuitePartenaire, dejaScanneeDansSession) et alimente le même scansSession,
+//  donc l'historique, le compteur et l'annulation (✕) fonctionnent à l'identique.
+// ════════════════════════════════════════════════
+function parserCSV(texte) {
+  const lignes = texte.split(/\r\n|\n|\r/).filter(l => l.trim() !== "");
+  if (lignes.length === 0) return { entetes: [], donnees: [] };
+  const premiere = lignes[0];
+  const sep = (premiere.match(/;/g) || []).length >= (premiere.match(/,/g) || []).length ? ";" : ",";
+  function parserLigne(ligne) {
+    const champs = [];
+    let champ = "", dansGuillemets = false;
+    for (let i = 0; i < ligne.length; i++) {
+      const c = ligne[i];
+      if (dansGuillemets) {
+        if (c === '"') { if (ligne[i + 1] === '"') { champ += '"'; i++; } else dansGuillemets = false; }
+        else champ += c;
+      } else {
+        if (c === '"') dansGuillemets = true;
+        else if (c === sep) { champs.push(champ); champ = ""; }
+        else champ += c;
+      }
+    }
+    champs.push(champ);
+    return champs.map(c => c.trim());
+  }
+  const entetes = parserLigne(lignes[0]);
+  const donnees = lignes.slice(1).map(parserLigne);
+  return { entetes, donnees };
+}
+ 
+function indexColonne(entetes, nom) { return entetes.findIndex(h => h.toLowerCase() === nom.toLowerCase()); }
+ 
+// ── Traite une ligne d'import : mêmes vérifications et mêmes écritures Grist qu'un scan manuel ──
+async function traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, commentaireBrut, etapeCode) {
+  const partiesMG = codeBrut.match(/^(.+)-(M\d+)$/);
+  let acc, accId, codeAffiche = codeBrut, codeMicrogreffeParent = null;
+ 
+  if (ETAPES_COMPOSITE_M.includes(etapeCode)) {
+    if (!partiesMG) return { ok: false, message: "Code composite attendu (ex : CODE-M01) pour cette étape." };
+    const codeAcc = partiesMG[1], numMG = partiesMG[2];
+    const rechercheAcc = trouverAccession(codeAcc);
+    if (rechercheAcc.statut === "introuvable") return { ok: false, message: `Accession "${codeAcc}" introuvable.` };
+    if (rechercheAcc.statut === "mauvaise_campagne") return { ok: false, message: `Code existe mais pas pour la campagne ${session.campagne}.` };
+    acc = rechercheAcc.acc; accId = acc.id; codeAffiche = codeAcc;
+    const mgExiste = cacheSuivi.some(r => r.codeIntroId === acc.id && codeEtapeParId(r.etapeId) === ETAPE_CROISSANCE_TUBE && r.codeMicrogreffe === numMG);
+    if (!mgExiste) return { ok: false, message: `Code "${numMG}" introuvable pour cette accession (étape Croissance en tube).` };
+    codeMicrogreffeParent = numMG;
+    const conflit = verifierContinuitePartenaire(acc.id, etapeCode);
+    if (conflit) return { ok: false, message: conflit };
+  } else {
+    if (partiesMG) return { ok: false, message: "Code composite non attendu pour cette étape." };
+    const rechercheAcc = trouverAccession(codeBrut);
+    if (rechercheAcc.statut === "introuvable") return { ok: false, message: `Accession "${codeBrut}" introuvable.` };
+    if (rechercheAcc.statut === "mauvaise_campagne") return { ok: false, message: `Code existe mais pas pour la campagne ${session.campagne}.` };
+    acc = rechercheAcc.acc; accId = acc.id;
+    if (dejaScanneeDansSession(acc.id, etapeCode)) return { ok: false, message: "Déjà enregistrée à cette étape (session ou import en cours)." };
+    const conflit = verifierContinuitePartenaire(acc.id, etapeCode);
+    if (conflit) return { ok: false, message: conflit };
+  }
+ 
+  let nbApex = null;
+  if (ETAPES_NB_APEX_SIMPLE.includes(etapeCode)) {
+    nbApex = parseInt(nbApexBrut);
+    if (!nbApex && nbApex !== 0) return { ok: false, message: "Colonne NbApex obligatoire (et absente/invalide) pour cette étape." };
+  }
+  let nbLignes = null;
+  if (etapeCode === ETAPE_CROISSANCE_TUBE) {
+    nbLignes = parseInt(nombreBrut);
+    if (!nbLignes || nbLignes < 1) return { ok: false, message: "Colonne Nombre obligatoire (≥ 1) pour cette étape." };
+  }
+  let nbBoutures = null;
+  if (etapeCode === ETAPE_MULT_PLANTES) {
+    nbBoutures = parseInt(nombreBrut);
+    if (!nbBoutures || nbBoutures < 1) return { ok: false, message: "Colonne Nombre obligatoire (≥ 1) pour cette étape." };
+  }
+ 
+  const fieldsBase = {
+    CodeIntro: accId, Methode: session.methode, Etape: session.etape,
+    Date: Math.floor(new Date(session.date).getTime() / 1000), Operateur: session.operateur,
+    Emplacement: session.emplacement, CodePartenaire: session.codePartenaire
+  };
+  if (reussite)        fieldsBase.Reussite     = reussite;
+  if (commentaireBrut) fieldsBase.Commentaires = commentaireBrut;
+  if (ETAPES_NB_APEX_SIMPLE.includes(etapeCode)) fieldsBase.NbApex = nbApex;
+  if (codeMicrogreffeParent && etapeCode !== ETAPE_MULT_PLANTES) fieldsBase.CodeMicrogreffe = codeMicrogreffeParent;
+ 
+  const estEchec = reussite === "Échec" || reussite === "Non conforme";
+ 
+  try {
+    if (etapeCode === ETAPE_CROISSANCE_TUBE) {
+      const actions = [];
+      for (let n = 1; n <= nbLignes; n++) actions.push(["AddRecord", "Suivi2", null, { ...fieldsBase, CodeMicrogreffe: `M${String(n).padStart(2, "0")}` }]);
+      const result = await grist.docApi.applyUserActions(actions);
+      scansSession.push({ code: codeAffiche, nom: acc.nomIntro, ok: true, echec: estEchec, gristIds: result.retValues, accId, etapeCode, nbLignes });
+    } else if (etapeCode === ETAPE_MULT_PLANTES) {
+      const bExistantes = cacheSuivi.filter(r =>
+        r.codeIntroId === accId && codeEtapeParId(r.etapeId) === ETAPE_MULT_PLANTES &&
+        r.codeMicrogreffe?.startsWith(codeMicrogreffeParent + "-MB")
+      ).length;
+      const actions = [];
+      for (let n = 1; n <= nbBoutures; n++) actions.push(["AddRecord", "Suivi2", null, { ...fieldsBase, CodeMicrogreffe: `${codeMicrogreffeParent}-MB${String(bExistantes + n).padStart(2, "0")}` }]);
+      const result = await grist.docApi.applyUserActions(actions);
+      scansSession.push({ code: codeAffiche, nom: `${acc.nomIntro} — ${codeMicrogreffeParent}`, ok: true, echec: estEchec, gristIds: result.retValues, accId, etapeCode, nbBoutures });
+    } else {
+      const result = await grist.docApi.applyUserActions([["AddRecord", "Suivi2", null, fieldsBase]]);
+      scansSession.push({ code: codeAffiche, nom: acc.nomIntro, ok: true, echec: estEchec, gristId: result.retValues[0], accId, etapeCode });
+    }
+    return { ok: true, message: "Importé" };
+  } catch (e) {
+    return { ok: false, message: "Erreur Grist : " + e.message };
+  }
+}
+ 
+async function importerCSV() {
+  const fichierInput = document.getElementById("import-fichier");
+  const fichier = fichierInput.files[0];
+  if (!fichier) return afficherAlerte("alerte-scan", "Choisir un fichier CSV.", "erreur");
+  if (!session.etape) return afficherAlerte("alerte-scan", "Session non démarrée.", "erreur");
+  masquerAlerte("alerte-scan");
+  document.getElementById("resultat-import").innerHTML = "";
+ 
+  const texte = await fichier.text();
+  const { entetes, donnees } = parserCSV(texte);
+  const idxCode = indexColonne(entetes, "Code");
+  const idxNombre = indexColonne(entetes, "Nombre");
+  const idxReussite = indexColonne(entetes, "Reussite");
+  const idxNbApex = indexColonne(entetes, "NbApex");
+  const idxCommentaire = indexColonne(entetes, "Commentaire");
+  if (idxCode === -1) return afficherAlerte("alerte-scan", 'Colonne "Code" introuvable dans le fichier.', "erreur");
+  if (donnees.length === 0) return afficherAlerte("alerte-scan", "Fichier vide (aucune ligne de données).", "erreur");
+ 
+  const etapeCode = codeEtapeParId(session.etape);
+  const resultats = [];
+  const btnImport = document.getElementById("btn-import");
+  btnImport.disabled = true;
+  btnImport.innerHTML = 'Import en cours <span class="spinner"></span>';
+ 
+  for (let i = 0; i < donnees.length; i++) {
+    const l = donnees[i];
+    const numLigne = i + 2;
+    const codeBrut = (l[idxCode] || "").trim().toUpperCase();
+    if (!codeBrut) { resultats.push({ ligne: numLigne, code: "", ok: false, message: "Code manquant" }); continue; }
+    const nombreBrut = idxNombre !== -1 ? (l[idxNombre] || "").trim() : "";
+    const reussiteBrut = idxReussite !== -1 ? (l[idxReussite] || "").trim() : "";
+    const nbApexBrut = idxNbApex !== -1 ? (l[idxNbApex] || "").trim() : "";
+    const commentaireBrut = idxCommentaire !== -1 ? (l[idxCommentaire] || "").trim() : "";
+ 
+    let reussite = null;
+    if (/^échec$|^echec$/i.test(reussiteBrut)) reussite = "Échec";
+    else if (/^non ?conforme$/i.test(reussiteBrut)) reussite = "Non conforme";
+    else if (/^conforme$/i.test(reussiteBrut)) reussite = "Conforme";
+    else if (reussiteBrut) { resultats.push({ ligne: numLigne, code: codeBrut, ok: false, message: `Valeur Reussite non reconnue : "${reussiteBrut}"` }); continue; }
+ 
+    const res = await traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, commentaireBrut, etapeCode);
+    resultats.push({ ligne: numLigne, code: codeBrut, ok: res.ok, message: res.message });
+  }
+ 
+  btnImport.disabled = false;
+  btnImport.textContent = "Importer";
+  mettreAJourCompteur();
+  afficherResultatImport(resultats);
+  fichierInput.value = "";
+}
+ 
+function afficherResultatImport(resultats) {
+  const nbOk = resultats.filter(r => r.ok).length;
+  const nbErr = resultats.filter(r => !r.ok).length;
+  let html = `<div class="alerte ${nbErr > 0 ? "info" : "succes"}" style="display:block">${nbOk} ligne(s) importée(s)${nbErr > 0 ? `, ${nbErr} en erreur (voir détail ci-dessous)` : ""}.</div>`;
+  if (nbErr > 0) {
+    html += `<div style="font-size:11px;color:var(--texte-2);max-height:160px;overflow-y:auto;border:1px solid var(--bordure);border-radius:5px;padding:8px 10px;margin-top:6px">` +
+      resultats.filter(r => !r.ok).map(r => `Ligne ${r.ligne} (${r.code || "—"}) : ${r.message}`).join("<br>") +
+      `</div>`;
+  }
+  document.getElementById("resultat-import").innerHTML = html;
 }
  
 async function enregistrerScan(reussite) {
