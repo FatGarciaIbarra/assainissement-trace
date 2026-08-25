@@ -136,17 +136,6 @@ textarea { resize: vertical; min-height: 60px; }
     </div>
     <div id="alerte-scan" class="alerte"></div>
     <div class="section">
-      <div class="section-titre">Importer un fichier CSV <span style="font-weight:400;text-transform:none;letter-spacing:0;opacity:0.75">(alternative au scan)</span></div>
-      <div class="section-corps">
-        <div class="champ"><label>Fichier</label><input type="file" id="import-fichier" accept=".csv"></div>
-        <div style="font-size:11px;color:var(--texte-2);margin-bottom:10px;line-height:1.6">
-          Colonnes : <strong>Code</strong> (obligatoire — code intro, ou <code>CODE-M01</code> pour Multiplication/Contrôle), <strong>Nombre</strong> (Croissance en tube / Multiplication uniquement), <strong>Reussite</strong> (vide = confirmé/conforme, sinon <code>Echec</code>, <code>NonConforme</code> ou <code>Conforme</code>), <strong>NbApex</strong> (Cryothérapie / Régénération méristèmes uniquement), <strong>Commentaire</strong>. Séparateur <code>,</code> ou <code>;</code>. Les mêmes règles que le scan manuel s'appliquent (continuité partenaire, doublons) — les lignes rejetées sont listées après import, sans bloquer les autres.
-        </div>
-        <div class="btns"><button class="btn btn-principal" id="btn-import" onclick="importerCSV()">Importer</button></div>
-        <div id="resultat-import"></div>
-      </div>
-    </div>
-    <div class="section">
       <div class="section-titre">Scanner une accession</div>
       <div class="section-corps">
         <div class="champ"><label>Code intro</label><input type="text" id="scan-code" class="scan-input" placeholder="Scanner…" autocomplete="off"></div>
@@ -168,6 +157,17 @@ textarea { resize: vertical; min-height: 60px; }
             <button class="btn btn-principal" id="btn-confirmer" onclick="enregistrerScan(null)">Confirmer ✓</button>
           </div>
         </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-titre">Importer un fichier CSV <span style="font-weight:400;text-transform:none;letter-spacing:0;opacity:0.75">(alternative au scan)</span></div>
+      <div class="section-corps">
+        <div class="champ"><label>Fichier</label><input type="file" id="import-fichier" accept=".csv"></div>
+        <div style="font-size:11px;color:var(--texte-2);margin-bottom:10px;line-height:1.6">
+          Colonnes : <strong>CodeIntro</strong> (obligatoire, ou <code>CodeIntro-M01</code> pour Multiplication/Contrôle), <strong>Nombre</strong> (Croissance en tube / Multiplication uniquement), <strong>Reussite</strong> (vide = confirmé/conforme, sinon <code>Echec</code>, <code>NonConforme</code> ou <code>Conforme</code>), <strong>NbApex</strong> (Cryothérapie / Régénération méristèmes uniquement), <strong>Commentaires</strong>. Séparateur <code>,</code> ou <code>;</code>. Les mêmes règles que le scan manuel s'appliquent (continuité partenaire, doublons) — les lignes rejetées sont listées après import, sans bloquer les autres.
+        </div>
+        <div class="btns"><button class="btn btn-principal" id="btn-import" onclick="importerCSV()">Importer</button></div>
+        <div id="resultat-import"></div>
       </div>
     </div>
     <div class="section" id="section-historique" style="display:none">
@@ -695,12 +695,12 @@ async function importerCSV() {
  
   const texte = await fichier.text();
   const { entetes, donnees } = parserCSV(texte);
-  const idxCode = indexColonne(entetes, "Code");
+  const idxCode = indexColonne(entetes, "CodeIntro");
   const idxNombre = indexColonne(entetes, "Nombre");
   const idxReussite = indexColonne(entetes, "Reussite");
   const idxNbApex = indexColonne(entetes, "NbApex");
-  const idxCommentaire = indexColonne(entetes, "Commentaire");
-  if (idxCode === -1) return afficherAlerte("alerte-scan", 'Colonne "Code" introuvable dans le fichier.', "erreur");
+  const idxCommentaire = indexColonne(entetes, "Commentaires");
+  if (idxCode === -1) return afficherAlerte("alerte-scan", 'Colonne "CodeIntro" introuvable dans le fichier.', "erreur");
   if (donnees.length === 0) return afficherAlerte("alerte-scan", "Fichier vide (aucune ligne de données).", "erreur");
  
   const etapeCode = codeEtapeParId(session.etape);
