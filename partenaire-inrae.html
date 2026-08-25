@@ -164,7 +164,7 @@ textarea { resize: vertical; min-height: 60px; }
       <div class="section-corps">
         <div class="champ"><label>Fichier</label><input type="file" id="import-fichier" accept=".csv"></div>
         <div style="font-size:11px;color:var(--texte-2);margin-bottom:10px;line-height:1.6">
-          Colonnes : <strong>CodeIntro</strong> (obligatoire, ou <code>CodeIntro-M01</code> pour Multiplication/Contrôle), <strong>Nombre</strong> (Croissance en tube / Multiplication uniquement), <strong>Reussite</strong> (vide = confirmé/conforme, sinon <code>Echec</code>, <code>NonConforme</code> ou <code>Conforme</code>), <strong>NbApex</strong> (Cryothérapie / Régénération méristèmes uniquement), <strong>Commentaires</strong>. 
+          Colonnes : <strong>CodeIntro</strong> (obligatoire, ou <code>CodeIntro-M01</code> pour Multiplication/Contrôle), <strong>Nombre</strong> (Croissance en tube / Multiplication uniquement), <strong>Reussite</strong> (vide = confirmé/conforme, sinon <code>Echec</code>, <code>NonConforme</code> ou <code>Conforme</code>), <strong>NbApex</strong> (Cryothérapie / Régénération méristèmes uniquement), <strong>Commentaires</strong>.
         </div>
         <div class="btns"><button class="btn btn-principal" id="btn-import" onclick="importerCSV()">Importer</button></div>
         <div id="resultat-import"></div>
@@ -660,6 +660,17 @@ async function traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, co
  
   const estEchec = reussite === "Échec" || reussite === "Non conforme";
  
+  // ── Avertissements non bloquants (même logique que le scan manuel) ──
+  let avertissement = null;
+  if (ETAPES_COMPOSITE_M.includes(etapeCode)) {
+    const av = [alerteEchecAnterieur(accId)];
+    if (etapeCode === ETAPE_CONTROLE) av.push(alerteControleAnterieur(accId, codeMicrogreffeParent));
+    avertissement = av.filter(Boolean).join(" · ") || null;
+  } else {
+    const av = [alerteEtapeDejaFaite(accId, etapeCode), alerteEchecAnterieur(accId)];
+    avertissement = av.filter(Boolean).join(" · ") || null;
+  }
+ 
   try {
     if (etapeCode === ETAPE_CROISSANCE_TUBE) {
       const actions = [];
@@ -679,7 +690,7 @@ async function traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, co
       const result = await grist.docApi.applyUserActions([["AddRecord", "Suivi2", null, fieldsBase]]);
       scansSession.push({ code: codeAffiche, nom: acc.nomIntro, ok: true, echec: estEchec, gristId: result.retValues[0], accId, etapeCode });
     }
-    return { ok: true, message: "Importé" };
+    return { ok: true, message: "Importé", avertissement };
   } catch (e) {
     return { ok: false, message: "Erreur Grist : " + e.message };
   }
@@ -726,7 +737,7 @@ async function importerCSV() {
     else if (reussiteBrut) { resultats.push({ ligne: numLigne, code: codeBrut, ok: false, message: `Valeur Reussite non reconnue : "${reussiteBrut}"` }); continue; }
  
     const res = await traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, commentaireBrut, etapeCode);
-    resultats.push({ ligne: numLigne, code: codeBrut, ok: res.ok, message: res.message });
+    resultats.push({ ligne: numLigne, code: codeBrut, ok: res.ok, message: res.message, avertissement: res.avertissement });
   }
  
   btnImport.disabled = false;
@@ -739,10 +750,12 @@ async function importerCSV() {
 function afficherResultatImport(resultats) {
   const nbOk = resultats.filter(r => r.ok).length;
   const nbErr = resultats.filter(r => !r.ok).length;
-  let html = `<div class="alerte ${nbErr > 0 ? "info" : "succes"}" style="display:block">${nbOk} ligne(s) importée(s)${nbErr > 0 ? `, ${nbErr} en erreur (voir détail ci-dessous)` : ""}.</div>`;
-  if (nbErr > 0) {
+  const nbAvert = resultats.filter(r => r.ok && r.avertissement).length;
+  let html = `<div class="alerte ${nbErr > 0 ? "info" : "succes"}" style="display:block">${nbOk} ligne(s) importée(s)${nbAvert > 0 ? `, dont ${nbAvert} avec avertissement` : ""}${nbErr > 0 ? `, ${nbErr} en erreur (voir détail ci-dessous)` : ""}.</div>`;
+  const details = resultats.filter(r => !r.ok || r.avertissement);
+  if (details.length > 0) {
     html += `<div style="font-size:11px;color:var(--texte-2);max-height:160px;overflow-y:auto;border:1px solid var(--bordure);border-radius:5px;padding:8px 10px;margin-top:6px">` +
-      resultats.filter(r => !r.ok).map(r => `Ligne ${r.ligne} (${r.code || "—"}) : ${r.message}`).join("<br>") +
+      details.map(r => `Ligne ${r.ligne} (${r.code || "—"}) : ${r.ok ? r.avertissement : r.message}`).join("<br>") +
       `</div>`;
   }
   document.getElementById("resultat-import").innerHTML = html;
