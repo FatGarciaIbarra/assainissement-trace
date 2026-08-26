@@ -1,3 +1,5 @@
+
+Partenaire ifv · TXT
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -179,6 +181,17 @@ textarea { resize: vertical; min-height: 60px; }
         </div>
       </div>
     </div>
+    <div class="section">
+      <div class="section-titre">Importer un fichier CSV <span style="font-weight:400;text-transform:none;letter-spacing:0;opacity:0.75">(alternative au scan)</span></div>
+      <div class="section-corps">
+        <div class="champ"><label>Fichier</label><input type="file" id="import-fichier" accept=".csv"></div>
+        <div style="font-size:11px;color:var(--texte-2);margin-bottom:10px;line-height:1.6">
+          Colonnes : <strong>CodeIntro</strong> (obligatoire, ou <code>CodeIntro-M01</code>/<code>CodeIntro-M01-MB01</code> selon l'étape), <strong>Nombre</strong> (Microgreffage / Microbouturage uniquement — pour Microbouturage, CodeIntro = la microgreffe parente <code>CodeIntro-M01</code>), <strong>Reussite</strong> (vide = confirmé/conforme, sinon <code>Echec</code>, <code>NonConforme</code> ou <code>Conforme</code>), <strong>Commentaires</strong>.
+        </div>
+        <div class="btns"><button class="btn btn-principal" id="btn-import" onclick="importerCSV()">Importer</button></div>
+        <div id="resultat-import"></div>
+      </div>
+    </div>
     <div class="section" id="section-historique" style="display:none">
       <div class="section-titre">Scans de la session <span id="nb-scans-titre" style="font-weight:400;opacity:0.7"></span></div>
       <div class="section-corps"><div class="liste-scans" id="liste-scans"></div></div>
@@ -216,7 +229,6 @@ const PARTENAIRE_CONFIG = {
   ],
   champs: {
     milieu:       { visible: false, requis: false },
-    nbApex:       { visible: false, requis: false },
     commentaire:  { visible: true,  requis: false }
   }
 };
@@ -661,6 +673,233 @@ function annulerScan() {
   document.getElementById("scan-code").focus();
 }
  
+// ════════════════════════════════════════════════
+//  IMPORT CSV — alternative au scan répété (session sans accès terrain au formulaire)
+//  Réutilise les mêmes fonctions de validation/écriture que le scan manuel et alimente le
+//  même scansSession, donc historique, compteur et annulation (✕) fonctionnent à l'identique.
+//  (Même mécanique que l'import CSV de partenaire-inrae-assainissement.html.)
+// ════════════════════════════════════════════════
+function parserCSV(texte) {
+  const lignes = texte.split(/\r\n|\n|\r/).filter(l => l.trim() !== "");
+  if (lignes.length === 0) return { entetes: [], donnees: [] };
+  const premiere = lignes[0];
+  const sep = (premiere.match(/;/g) || []).length >= (premiere.match(/,/g) || []).length ? ";" : ",";
+  function parserLigne(ligne) {
+    const champs = [];
+    let champ = "", dansGuillemets = false;
+    for (let i = 0; i < ligne.length; i++) {
+      const c = ligne[i];
+      if (dansGuillemets) {
+        if (c === '"') { if (ligne[i + 1] === '"') { champ += '"'; i++; } else dansGuillemets = false; }
+        else champ += c;
+      } else {
+        if (c === '"') dansGuillemets = true;
+        else if (c === sep) { champs.push(champ); champ = ""; }
+        else champ += c;
+      }
+    }
+    champs.push(champ);
+    return champs.map(c => c.trim());
+  }
+  const entetes = parserLigne(lignes[0]);
+  const donnees = lignes.slice(1).map(parserLigne);
+  return { entetes, donnees };
+}
+ 
+function indexColonne(entetes, nom) { return entetes.findIndex(h => h.toLowerCase() === nom.toLowerCase()); }
+ 
+// ── Traite une ligne d'import : reproduit les branches de rechercherAccession() + enregistrerScan() ──
+async function traiterLigneImportIFV(codeBrut, nombreBrut, reussite, commentaireBrut, etapeCode) {
+  const partiesMB = codeBrut.match(/^(.+)-(M\d+)-(MB\d+)$/);
+  const partiesMG = !partiesMB ? codeBrut.match(/^(.+)-(M\d+)$/) : null;
+  const accepteComposite = ETAPES_POST_MG.includes(etapeCode) || etapeCode === ETAPE_STOCKAGE;
+  const timestamp = Math.floor(new Date(session.date).getTime() / 1000);
+ 
+  // ── Microgreffage : Code = accession simple, Nombre = nb microgreffes ──
+  if (etapeCode === ETAPE_MICROGREFFAGE) {
+    if (partiesMG || partiesMB) return { ok: false, message: "Code composite non attendu pour Microgreffage (indiquer le code accession seul)." };
+    const rechercheAcc = trouverAccession(codeBrut);
+    if (rechercheAcc.statut === "introuvable") return { ok: false, message: `Accession "${codeBrut}" introuvable.` };
+    if (rechercheAcc.statut === "mauvaise_campagne") return { ok: false, message: `Code existe mais pas pour la campagne ${session.campagne}.` };
+    const acc = rechercheAcc.acc;
+    const erreurSeq = validerEtapePlanteMere(acc.id, etapeCode);
+    if (erreurSeq && erreurSeq.bloquant) return { ok: false, message: erreurSeq.message };
+    const avertissementMG = (erreurSeq && !erreurSeq.bloquant) ? erreurSeq.message : null;
+    const nb = parseInt(nombreBrut);
+    if (!nb || nb < 1) return { ok: false, message: "Colonne Nombre obligatoire (≥ 1) pour Microgreffage." };
+    const existants = getMicrogreffes(acc.id);
+    const numerosExistants = existants.map(m => parseInt(m.replace("M", ""))).filter(n => !isNaN(n));
+    const depart = numerosExistants.length > 0 ? Math.max(...numerosExistants) + 1 : 1;
+    const actions = [];
+    for (let i = 0; i < nb; i++) {
+      const numMG = "M" + String(depart + i).padStart(2, "0");
+      actions.push(["AddRecord", "Suivi2", null, {
+        CodeIntro: acc.id, Methode: session.methode, Etape: session.etape, Date: timestamp,
+        Operateur: session.operateur, Emplacement: session.emplacement, CodePartenaire: session.codePartenaire,
+        CodeMicrogreffe: numMG, ...(commentaireBrut ? { Commentaires: commentaireBrut } : {})
+      }]);
+    }
+    try {
+      const result = await grist.docApi.applyUserActions(actions);
+      result.retValues.forEach((gristId, i) => {
+        cacheSuivi.push({ id: gristId, codeIntroId: acc.id, etapeId: session.etape, codeMicrogreffe: "M" + String(depart + i).padStart(2, "0"), date: timestamp });
+      });
+      scansSession.push({ code: codeBrut, nom: `${acc.nomIntro} (${nb} microgreffes)`, ok: true, echec: false, gristId: result.retValues[0], multi: true, accId: acc.id, etapeCode });
+      return { ok: true, message: "Importé", avertissement: avertissementMG };
+    } catch (e) { return { ok: false, message: "Erreur Grist : " + e.message }; }
+  }
+ 
+  // ── Microbouturage : Code = microgreffe parente composite (CODE-M01), Nombre = nb boutures ──
+  if (etapeCode === ETAPE_OPTIONNELLE) {
+    if (!partiesMG) return { ok: false, message: "Code composite attendu (ex : CODE-M01, la microgreffe parente) pour Microbouturage." };
+    const codeAcc = partiesMG[1], numMG = partiesMG[2];
+    const rechercheAcc = trouverAccession(codeAcc);
+    if (rechercheAcc.statut === "introuvable") return { ok: false, message: `Accession "${codeAcc}" introuvable.` };
+    if (rechercheAcc.statut === "mauvaise_campagne") return { ok: false, message: `Code existe mais pas pour la campagne ${session.campagne}.` };
+    const acc = rechercheAcc.acc;
+    const mgExiste = cacheSuivi.some(r => r.codeIntroId === acc.id && codeEtapeParId(r.etapeId) === ETAPE_MICROGREFFAGE && r.codeMicrogreffe === numMG);
+    if (!mgExiste) return { ok: false, message: `Microgreffe "${numMG}" introuvable pour cette accession.` };
+    const nb = parseInt(nombreBrut);
+    if (!nb || nb < 1) return { ok: false, message: "Colonne Nombre obligatoire (≥ 1) pour Microbouturage." };
+    const mbExistantes = cacheSuivi.filter(r => r.codeIntroId === acc.id && codeEtapeParId(r.etapeId) === ETAPE_OPTIONNELLE && r.codeMicrogreffe?.startsWith(numMG + "-MB")).length;
+    const actions = [];
+    for (let i = 1; i <= nb; i++) {
+      actions.push(["AddRecord", "Suivi2", null, {
+        CodeIntro: acc.id, Methode: session.methode, Etape: session.etape, Date: timestamp,
+        Operateur: session.operateur, Emplacement: session.emplacement, CodePartenaire: session.codePartenaire,
+        CodeMicrogreffe: numMG + "-MB" + String(mbExistantes + i).padStart(2, "0")
+      }]);
+    }
+    try {
+      const result = await grist.docApi.applyUserActions(actions);
+      result.retValues.forEach((gristId, i) => {
+        cacheSuivi.push({ id: gristId, codeIntroId: acc.id, etapeId: session.etape, codeMicrogreffe: numMG + "-MB" + String(mbExistantes + i + 1).padStart(2, "0"), date: timestamp });
+      });
+      scansSession.push({ code: codeBrut, nom: `${acc.nomIntro} — ${numMG} (${nb} microboutures)`, ok: true, echec: false, gristId: result.retValues[0], multi: true, accId: acc.id, etapeCode });
+      return { ok: true, message: "Importé" };
+    } catch (e) { return { ok: false, message: "Erreur Grist : " + e.message }; }
+  }
+ 
+  // ── Composite MG/MB (Contrôle, Transmission, Stockage) ou code simple (autres étapes) ──
+  let acc, accId, codeMicrogreffe = null, codeAffiche = codeBrut, avertissement = null;
+  if (partiesMB && accepteComposite) {
+    const codeAcc = partiesMB[1], numMG = partiesMB[2], numMB = partiesMB[3];
+    const rechercheAcc = trouverAccession(codeAcc);
+    if (rechercheAcc.statut === "introuvable") return { ok: false, message: `Accession "${codeAcc}" introuvable.` };
+    if (rechercheAcc.statut === "mauvaise_campagne") return { ok: false, message: `Code existe mais pas pour la campagne ${session.campagne}.` };
+    acc = rechercheAcc.acc; accId = acc.id;
+    const mgExiste = cacheSuivi.some(r => r.codeIntroId === acc.id && codeEtapeParId(r.etapeId) === ETAPE_MICROGREFFAGE && r.codeMicrogreffe === numMG);
+    if (!mgExiste) return { ok: false, message: `Microgreffe "${numMG}" introuvable pour cette accession.` };
+    codeMicrogreffe = numMG + "-" + numMB;
+    codeAffiche = codeAcc;
+  } else if (partiesMG && accepteComposite) {
+    const codeAcc = partiesMG[1], numMG = partiesMG[2];
+    const rechercheAcc = trouverAccession(codeAcc);
+    if (rechercheAcc.statut === "introuvable") return { ok: false, message: `Accession "${codeAcc}" introuvable.` };
+    if (rechercheAcc.statut === "mauvaise_campagne") return { ok: false, message: `Code existe mais pas pour la campagne ${session.campagne}.` };
+    acc = rechercheAcc.acc; accId = acc.id;
+    const mgExiste = cacheSuivi.some(r => r.codeIntroId === acc.id && codeEtapeParId(r.etapeId) === ETAPE_MICROGREFFAGE && r.codeMicrogreffe === numMG);
+    if (!mgExiste) return { ok: false, message: `Microgreffe "${numMG}" introuvable pour cette accession.` };
+    codeMicrogreffe = numMG;
+    codeAffiche = codeAcc;
+    if (etapeCode !== ETAPE_STOCKAGE) avertissement = validerSequenceParMG(accId, etapeCode, numMG);
+  } else if (partiesMG || partiesMB) {
+    return { ok: false, message: "Code composite non attendu pour cette étape." };
+  } else {
+    if (ETAPES_POST_MG.includes(etapeCode)) return { ok: false, message: "Code composite attendu (ex : CODE-M01) pour cette étape." };
+    const rechercheAcc = trouverAccession(codeBrut);
+    if (rechercheAcc.statut === "introuvable") return { ok: false, message: `Accession "${codeBrut}" introuvable.` };
+    if (rechercheAcc.statut === "mauvaise_campagne") return { ok: false, message: `Code existe mais pas pour la campagne ${session.campagne}.` };
+    acc = rechercheAcc.acc; accId = acc.id;
+    const erreurSeq = validerEtapePlanteMere(acc.id, etapeCode);
+    if (erreurSeq && erreurSeq.bloquant) return { ok: false, message: erreurSeq.message };
+    if (erreurSeq && !erreurSeq.bloquant) avertissement = erreurSeq.message;
+    const conf = alerteConformite(accId);
+    if (conf) avertissement = avertissement ? avertissement + " · " + conf : conf;
+  }
+ 
+  const fields = {
+    CodeIntro: accId, Methode: session.methode, Etape: session.etape, Date: timestamp,
+    Operateur: session.operateur, Emplacement: session.emplacement, CodePartenaire: session.codePartenaire
+  };
+  if (reussite)         fields.Reussite     = reussite;
+  if (commentaireBrut)  fields.Commentaires = commentaireBrut;
+  if (codeMicrogreffe)  fields.CodeMicrogreffe = codeMicrogreffe;
+ 
+  try {
+    const result = await grist.docApi.applyUserActions([["AddRecord", "Suivi2", null, fields]]);
+    const gristId = result.retValues[0];
+    cacheSuivi.push({ id: gristId, codeIntroId: accId, etapeId: session.etape, codeMicrogreffe, date: timestamp });
+    const estEchec = reussite === "Échec" || reussite === "Non conforme";
+    const label = codeMicrogreffe ? `${codeAffiche} — ${codeMicrogreffe}` : codeAffiche;
+    scansSession.push({ code: label, nom: acc.nomIntro, ok: true, echec: estEchec, gristId, accId, etapeCode });
+    return { ok: true, message: "Importé", avertissement };
+  } catch (e) { return { ok: false, message: "Erreur Grist : " + e.message }; }
+}
+ 
+async function importerCSV() {
+  const fichierInput = document.getElementById("import-fichier");
+  const fichier = fichierInput.files[0];
+  if (!fichier) return afficherAlerte("alerte-scan", "Choisir un fichier CSV.", "erreur");
+  if (!session.etape) return afficherAlerte("alerte-scan", "Session non démarrée.", "erreur");
+  masquerAlerte("alerte-scan");
+  document.getElementById("resultat-import").innerHTML = "";
+ 
+  const texte = await fichier.text();
+  const { entetes, donnees } = parserCSV(texte);
+  const idxCode = indexColonne(entetes, "CodeIntro");
+  const idxNombre = indexColonne(entetes, "Nombre");
+  const idxReussite = indexColonne(entetes, "Reussite");
+  const idxCommentaire = indexColonne(entetes, "Commentaires");
+  if (idxCode === -1) return afficherAlerte("alerte-scan", 'Colonne "CodeIntro" introuvable dans le fichier.', "erreur");
+  if (donnees.length === 0) return afficherAlerte("alerte-scan", "Fichier vide (aucune ligne de données).", "erreur");
+ 
+  const etapeCode = codeEtapeParId(session.etape);
+  const resultats = [];
+  const btnImport = document.getElementById("btn-import");
+  btnImport.disabled = true;
+  btnImport.innerHTML = 'Import en cours <span class="spinner"></span>';
+ 
+  for (let i = 0; i < donnees.length; i++) {
+    const l = donnees[i];
+    const numLigne = i + 2;
+    const codeBrut = (l[idxCode] || "").trim().toUpperCase();
+    if (!codeBrut) { resultats.push({ ligne: numLigne, code: "", ok: false, message: "Code manquant" }); continue; }
+    const nombreBrut = idxNombre !== -1 ? (l[idxNombre] || "").trim() : "";
+    const reussiteBrut = idxReussite !== -1 ? (l[idxReussite] || "").trim() : "";
+    const commentaireBrut = idxCommentaire !== -1 ? (l[idxCommentaire] || "").trim() : "";
+ 
+    let reussite = null;
+    if (/^échec$|^echec$/i.test(reussiteBrut)) reussite = "Échec";
+    else if (/^non ?conforme$/i.test(reussiteBrut)) reussite = "Non conforme";
+    else if (/^conforme$/i.test(reussiteBrut)) reussite = "Conforme";
+    else if (reussiteBrut) { resultats.push({ ligne: numLigne, code: codeBrut, ok: false, message: `Valeur Reussite non reconnue : "${reussiteBrut}"` }); continue; }
+ 
+    const res = await traiterLigneImportIFV(codeBrut, nombreBrut, reussite, commentaireBrut, etapeCode);
+    resultats.push({ ligne: numLigne, code: codeBrut, ok: res.ok, message: res.message, avertissement: res.avertissement });
+  }
+ 
+  btnImport.disabled = false;
+  btnImport.textContent = "Importer";
+  mettreAJourCompteur();
+  afficherResultatImport(resultats);
+  fichierInput.value = "";
+}
+ 
+function afficherResultatImport(resultats) {
+  const nbOk = resultats.filter(r => r.ok).length;
+  const nbErr = resultats.filter(r => !r.ok).length;
+  const nbAvert = resultats.filter(r => r.ok && r.avertissement).length;
+  let html = `<div class="alerte ${nbErr > 0 ? "info" : "succes"}" style="display:block">${nbOk} ligne(s) importée(s)${nbAvert > 0 ? `, dont ${nbAvert} avec avertissement` : ""}${nbErr > 0 ? `, ${nbErr} en erreur (voir détail ci-dessous)` : ""}.</div>`;
+  const details = resultats.filter(r => !r.ok || r.avertissement);
+  if (details.length > 0) {
+    html += `<div style="font-size:11px;color:var(--texte-2);max-height:160px;overflow-y:auto;border:1px solid var(--bordure);border-radius:5px;padding:8px 10px;margin-top:6px">` +
+      details.map(r => `Ligne ${r.ligne} (${r.code || "—"}) : ${r.ok ? r.avertissement : r.message}`).join("<br>") +
+      `</div>`;
+  }
+  document.getElementById("resultat-import").innerHTML = html;
+}
+ 
 async function enregistrerScan(reussite) {
   if (!accessionCourante || enRegistrement) return;
   const etapeCode = codeEtapeParId(session.etape);
@@ -835,4 +1074,3 @@ function masquerAlerte(id) { const el=document.getElementById(id); el.className=
 </body>
 </html>
  
-
