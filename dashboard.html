@@ -74,6 +74,23 @@ tbody tr:hover { background: var(--vert-light); }
 .badge.stocke    { background: #fff7e6; color: var(--avert); }
 .vide { padding: 24px; text-align: center; color: var(--texte-2); font-size: 12px; }
 .compte-lignes { font-size: 11px; color: var(--texte-2); margin: 8px 2px; }
+tbody tr.ligne-cliquable { cursor: pointer; }
+.modal-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(26,26,24,0.45); z-index: 100;
+  align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto;
+}
+.modal-overlay.actif { display: flex; }
+.modal-boite { background: #fff; border-radius: 8px; max-width: 760px; width: 100%; padding: 20px 22px; box-shadow: 0 8px 30px rgba(0,0,0,0.2); }
+.modal-entete { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; }
+.modal-titre { font-size: 14px; color: var(--vert); font-weight: 500; }
+.modal-soustitre { font-size: 11px; color: var(--texte-2); margin-top: 2px; }
+.modal-fermer {
+  font-family: inherit; font-size: 18px; line-height: 1; background: none; border: none; color: var(--texte-2);
+  cursor: pointer; padding: 2px 6px;
+}
+.modal-fermer:hover { color: var(--erreur); }
+.modal-infos { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 6px 14px; margin: 14px 0; font-size: 12px; }
+.modal-infos div span { display: block; font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--texte-2); margin-bottom: 1px; }
 </style>
 </head>
 <body>
@@ -143,6 +160,21 @@ tbody tr:hover { background: var(--vert-light); }
       <div class="sous-titre" style="margin-bottom:8px">Règle de contrôle de complétude — voir README. Une présence ici n'est pas forcément anormale (le suivi peut être simplement en cours), mais mérite vérification si ancien.</div>
       <div class="tableau-scroll"><table id="table-alertes-orphelins"></table></div>
       <div style="margin-top:12px"><button class="btn-export" onclick="exporterOnglet('alertes')">Exporter CSV (les deux listes)</button></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modal-detail" onclick="if(event.target===this) fermerDetail()">
+    <div class="modal-boite">
+      <div class="modal-entete">
+        <div>
+          <div class="modal-titre" id="modal-titre"></div>
+          <div class="modal-soustitre" id="modal-soustitre"></div>
+        </div>
+        <button class="modal-fermer" onclick="fermerDetail()" aria-label="Fermer">✕</button>
+      </div>
+      <div class="modal-infos" id="modal-infos"></div>
+      <div class="section-titre">Historique complet (accession + tubes/boutures)</div>
+      <div class="tableau-scroll"><table id="modal-table-historique"></table></div>
     </div>
   </div>
 </div>
@@ -376,6 +408,7 @@ function lignesAccessionsFiltrees() {
       return true;
     })
     .map(({ acc, s }) => ({
+      id: acc.id,
       codeIntro: acc.codeIntro, nomIntro: acc.nomIntro, nomVar: acc.nomVar, campagne: acc.campagne, type: acc.type,
       virose1: acc.virose1, virose2: acc.virose2, virose3: acc.virose3,
       titulaire: s.titulaire, statut: s.statut, derniereEtape: s.derniereEtape,
@@ -402,6 +435,7 @@ function lignesTubesFiltrees() {
       return true;
     })
     .map(({ t, acc }) => ({
+      codeIntroId: t.codeIntroId,
       codeIntro: acc.codeIntro, code: t.code, typeCode: t.typeCode, statut: t.statut,
       derniereEtape: t.derniereEtape, derniereDate: formatDate(t.derniereDate), partenaire: t.dernierPartenaire
     }));
@@ -465,7 +499,7 @@ function rendreAccessions() {
       <th>Court-noué</th><th>Enroulement</th><th>Marbrure/Corky/Cann.</th>
       <th>Partenaire titulaire</th><th>Statut</th><th>Dernière étape</th><th>Dernière date</th>
     </tr></thead><tbody>` +
-    (lignes.length ? lignes.map(l => `<tr>
+    (lignes.length ? lignes.map(l => `<tr class="ligne-cliquable" onclick="ouvrirDetailAccession(${l.id})">
       <td>${l.codeIntro}</td><td>${l.nomIntro}</td><td>${l.nomVar}</td><td>${l.campagne}</td><td>${l.type}</td>
       <td>${l.virose1}</td><td>${l.virose2}</td><td>${l.virose3}</td>
       <td>${l.titulaire}</td><td><span class="badge ${classeBadge(l.statut)}">${l.statut}</span></td>
@@ -479,7 +513,7 @@ function rendreTubes() {
   document.getElementById("compte-tubes").textContent = `${lignes.length} tube(s)/bouture(s)`;
   document.getElementById("table-tubes").innerHTML =
     `<thead><tr><th>Code intro</th><th>Code</th><th>Type</th><th>Statut</th><th>Dernière étape</th><th>Dernière date</th><th>Partenaire</th></tr></thead><tbody>` +
-    (lignes.length ? lignes.map(l => `<tr>
+    (lignes.length ? lignes.map(l => `<tr class="ligne-cliquable" onclick="ouvrirDetailAccession(${l.codeIntroId})">
       <td>${l.codeIntro}</td><td>${l.code}</td><td>${l.typeCode}</td>
       <td><span class="badge ${classeBadge(l.statut)}">${l.statut}</span></td>
       <td>${l.derniereEtape}</td><td>${l.derniereDate}</td><td>${l.partenaire}</td>
@@ -489,20 +523,20 @@ function rendreTubes() {
 
 function rendreAlertes() {
   const echecsAcc = cacheAccessions.map(acc => ({ acc, s: statutAccession(acc) })).filter(({ s }) => s.statut === "Échec / Non conforme")
-    .map(({ acc, s }) => ({ codeIntro: acc.codeIntro, campagne: acc.campagne, derniereEtape: s.derniereEtape, derniereDate: formatDate(s.derniereDate), partenaire: s.dernierPartenaire }));
+    .map(({ acc, s }) => ({ id: acc.id, codeIntro: acc.codeIntro, campagne: acc.campagne, derniereEtape: s.derniereEtape, derniereDate: formatDate(s.derniereDate), partenaire: s.dernierPartenaire }));
   document.getElementById("table-alertes-echecs").innerHTML =
     `<thead><tr><th>Code intro</th><th>Campagne</th><th>Dernière étape</th><th>Dernière date</th><th>Partenaire</th></tr></thead><tbody>` +
-    (echecsAcc.length ? echecsAcc.map(l => `<tr><td>${l.codeIntro}</td><td>${l.campagne}</td><td>${l.derniereEtape}</td><td>${l.derniereDate}</td><td>${l.partenaire}</td></tr>`).join("")
+    (echecsAcc.length ? echecsAcc.map(l => `<tr class="ligne-cliquable" onclick="ouvrirDetailAccession(${l.id})"><td>${l.codeIntro}</td><td>${l.campagne}</td><td>${l.derniereEtape}</td><td>${l.derniereDate}</td><td>${l.partenaire}</td></tr>`).join("")
       : `<tr><td colspan="5" class="vide">Aucun échec/non-conformité en dernière action</td></tr>`) +
     `</tbody>`;
 
   const orphelins = construireTubes().filter(t => t.statut === "En cours").map(t => {
     const acc = accessionParId(t.codeIntroId);
-    return { codeIntro: acc ? acc.codeIntro : "—", campagne: acc ? acc.campagne : "—", code: t.code, typeCode: t.typeCode, derniereEtape: t.derniereEtape, derniereDate: formatDate(t.derniereDate), partenaire: t.dernierPartenaire };
+    return { codeIntroId: t.codeIntroId, codeIntro: acc ? acc.codeIntro : "—", campagne: acc ? acc.campagne : "—", code: t.code, typeCode: t.typeCode, derniereEtape: t.derniereEtape, derniereDate: formatDate(t.derniereDate), partenaire: t.dernierPartenaire };
   });
   document.getElementById("table-alertes-orphelins").innerHTML =
     `<thead><tr><th>Code intro</th><th>Campagne</th><th>Code</th><th>Type</th><th>Dernière étape</th><th>Dernière date</th><th>Partenaire</th></tr></thead><tbody>` +
-    (orphelins.length ? orphelins.map(l => `<tr><td>${l.codeIntro}</td><td>${l.campagne}</td><td>${l.code}</td><td>${l.typeCode}</td><td>${l.derniereEtape}</td><td>${l.derniereDate}</td><td>${l.partenaire}</td></tr>`).join("")
+    (orphelins.length ? orphelins.map(l => `<tr class="ligne-cliquable" onclick="ouvrirDetailAccession(${l.codeIntroId})"><td>${l.codeIntro}</td><td>${l.campagne}</td><td>${l.code}</td><td>${l.typeCode}</td><td>${l.derniereEtape}</td><td>${l.derniereDate}</td><td>${l.partenaire}</td></tr>`).join("")
       : `<tr><td colspan="7" class="vide">Aucun tube/bouture sans état terminal</td></tr>`) +
     `</tbody>`;
 }
@@ -555,6 +589,42 @@ function exporterOnglet(nom) {
     ], [...echecsAcc, ...orphelins]);
   }
 }
+
+// ── Détail d'une accession : historique complet (accession + tubes/boutures confondus) ──
+function ouvrirDetailAccession(accId) {
+  const acc = accessionParId(accId);
+  if (!acc) return;
+  const s = statutAccession(acc);
+  const hist = historiqueAccession(accId);
+
+  document.getElementById("modal-titre").textContent = `${acc.codeIntro} — ${acc.nomIntro}`;
+  document.getElementById("modal-soustitre").textContent = `${acc.nomVar} · Campagne ${acc.campagne}`;
+  document.getElementById("modal-infos").innerHTML = `
+    <div><span>Type</span>${acc.type}</div>
+    <div><span>Partenaire titulaire</span>${s.titulaire}</div>
+    <div><span>Statut</span><span class="badge ${classeBadge(s.statut)}">${s.statut}</span></div>
+    <div><span>Court-noué</span>${acc.virose1}</div>
+    <div><span>Enroulement</span>${acc.virose2}</div>
+    <div><span>Marbrure/Corky/Cann.</span>${acc.virose3}</div>
+  `;
+
+  document.getElementById("modal-table-historique").innerHTML =
+    `<thead><tr><th>Date</th><th>Étape</th><th>Code tube/bouture</th><th>Partenaire</th><th>Opérateur</th><th>Résultat</th><th>Emplacement</th><th>Commentaires</th></tr></thead><tbody>` +
+    (hist.length ? hist.map(r => `<tr>
+      <td>${formatDate(r.date)}</td><td>${nomEtape(r.etapeId)}</td><td>${r.codeMicrogreffe || "—"}</td>
+      <td>${r.codePartenaire || "—"}</td><td>${nomOperateur(r.operateurId)}</td>
+      <td>${r.reussite || "—"}</td><td>${r.emplacement || "—"}</td><td>${r.commentaires || "—"}</td>
+    </tr>`).join("") : `<tr><td colspan="8" class="vide">Aucune ligne enregistrée</td></tr>`) +
+    `</tbody>`;
+
+  document.getElementById("modal-detail").classList.add("actif");
+}
+
+function fermerDetail() {
+  document.getElementById("modal-detail").classList.remove("actif");
+}
+
+document.addEventListener("keydown", e => { if (e.key === "Escape") fermerDetail(); });
 </script>
 </body>
 </html>
