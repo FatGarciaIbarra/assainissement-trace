@@ -184,7 +184,7 @@ textarea { resize: vertical; min-height: 60px; }
       <div class="section-corps">
         <div class="champ"><label>Fichier</label><input type="file" id="import-fichier" accept=".csv"></div>
         <div style="font-size:11px;color:var(--texte-2);margin-bottom:10px;line-height:1.6">
-          Colonnes : <strong>CodeIntro</strong> (obligatoire, ou <code>CodeIntro-M01</code>/<code>CodeIntro-M01-MB01</code> selon l'étape), <strong>Nombre</strong> (Microgreffage / Microbouturage uniquement — pour Microbouturage, CodeIntro = la microgreffe parente <code>CodeIntro-M01</code>), <strong>Reussite</strong> (vide = confirmé/conforme, sinon <code>Echec</code>, <code>NonConforme</code> ou <code>Conforme</code>), <strong>Commentaires</strong>.
+          Colonnes : <strong>CodeIntro</strong> (obligatoire, ou <code>CodeIntro-µ01</code>/<code>CodeIntro-µ01-A</code> selon l'étape — les anciens codes <code>CodeIntro-M01</code>/<code>CodeIntro-M01-MB01</code> restent aussi reconnus), <strong>Nombre</strong> (Microgreffage / Microbouturage uniquement — pour Microbouturage, CodeIntro = la microgreffe parente <code>CodeIntro-µ01</code>), <strong>Reussite</strong> (vide = confirmé/conforme, sinon <code>Echec</code>, <code>NonConforme</code> ou <code>Conforme</code>), <strong>Commentaires</strong>.
         </div>
         <div class="btns"><button class="btn btn-principal" id="btn-import" onclick="importerCSV()">Importer</button></div>
         <div id="resultat-import"></div>
@@ -245,6 +245,37 @@ const SEQUENCE_IFV   = ["C_MICROGREFFAGE","C_CONTROLE","C_MICROBOUTURAGE","F_TRA
 const ETAPES_POST_MG = ["C_CONTROLE","C_MICROBOUTURAGE","F_TRANSMISSION_INRAE"];
 const SEUIL_MICROGREFFES  = 8;
 const ETAPE_STOCKAGE = "STOCKAGE";
+ 
+// ── Format des codes composites ──
+// Nouveaux codes (à partir de maintenant) : microgreffe "µ01", microbouture "µ01-A". Les anciens
+// codes "M01"/"M01-MB01" déjà enregistrés dans Grist ne sont pas renommés — le formulaire doit donc
+// continuer à les reconnaître en lecture (scan, import CSV, numérotation), même si toute nouvelle
+// génération utilise désormais µ/lettres. D'où les regex qui acceptent les deux formes partout.
+const RE_TUBE = "(?:M\\d+|µ\\d+)";
+const RE_BOUTURE = "(?:MB\\d+|[A-Za-z]+)";
+const RE_PARTIES_MG = new RegExp(`^(.+)-(${RE_TUBE})$`);
+const RE_PARTIES_MB = new RegExp(`^(.+)-(${RE_TUBE})-(${RE_BOUTURE})$`);
+ 
+// ── Premier numéro de tube libre (entier), en tenant compte des anciens codes "M0x" ET des nouveaux "µ0x" déjà pris ──
+function premierNumeroMGLibre(codesExistants) {
+  const numeros = codesExistants.map(m => parseInt(m.replace(/^[Mµ]/, ""), 10)).filter(n => !isNaN(n));
+  return numeros.length > 0 ? Math.max(...numeros) + 1 : 1;
+}
+ 
+// ── Lettre suivante façon colonnes de tableur : 1→A, 2→B … 26→Z, 27→AA … ──
+function lettreDepuisIndex(n) {
+  let s = "";
+  while (n > 0) { n--; s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26); }
+  return s;
+}
+ 
+// ── Nombre de boutures déjà enregistrées pour un tube, anciennes ("-MB0x") et nouvelles ("-A"/"-B"…) confondues ──
+function nbBouturesExistantes(accId, mgParente) {
+  return cacheSuivi.filter(r =>
+    r.codeIntroId === accId && codeEtapeParId(r.etapeId) === ETAPE_OPTIONNELLE &&
+    r.codeMicrogreffe && r.codeMicrogreffe.startsWith(mgParente + "-")
+  ).length;
+}
  
 let cacheAccessions = {}, cacheOperateurs = [], cacheEtapes = [];
 let cacheSuivi = [];
@@ -308,6 +339,7 @@ async function chargerDonnees() {
       codeIntroId:   suivi.CodeIntro[i],
       etapeId:       suivi.Etape[i],
       codeMicrogreffe:  suivi.CodeMicrogreffe ? suivi.CodeMicrogreffe[i] : null,
+      codePartenaire: suivi.CodePartenaire ? suivi.CodePartenaire[i] : null,
       date:          suivi.Date[i]
     }));
   } catch(e) { afficherAlerte("alerte-config", "Erreur de chargement : " + e.message, "erreur"); }
@@ -342,6 +374,12 @@ function trouverAccession(code) {
 }
  
 // ── Validation de l'étape pour la PLANTE MÈRE (accession) ──
+// ── Ajoute une mention du partenaire d'origine à un message d'avertissement, uniquement si ──
+// différent du partenaire de la session en cours (sinon redondant, on sait déjà que c'est nous).
+function mentionPartenaire(codePartenaire) {
+  return (codePartenaire && codePartenaire !== session.codePartenaire) ? ` (par ${codePartenaire})` : "";
+}
+ 
 function validerEtapePlanteMere(accId, etapeCode) {
   if (etapeCode === ETAPE_STOCKAGE) return null;
   const historique = cacheSuivi
@@ -374,7 +412,7 @@ function validerEtapePlanteMere(accId, etapeCode) {
     if (idxBase <= idxDerniereBase) {
       const vraieDerniere = [...historique].sort((a,b) => b.date - a.date || b.id - a.id)[0];
       const vraieDerniereCode = vraieDerniere ? codeEtapeParId(vraieDerniere.etapeId) : derniereBase;
-      return { bloquant: false, message: `⚠️ Étape déjà enregistrée. Dernière étape enregistrée : ${vraieDerniereCode}.` };
+      return { bloquant: false, message: `⚠️ Étape déjà enregistrée. Dernière étape enregistrée : ${vraieDerniereCode}${mentionPartenaire(vraieDerniere?.codePartenaire)}.` };
     }
     if (idxBase > idxDerniereBase + 1)
       return { bloquant: false, message: `⚠️ Étape inattendue. Étape attendue : ${SEQUENCE_BASE[idxDerniereBase + 1]}.` };
@@ -388,8 +426,10 @@ function validerEtapePlanteMere(accId, etapeCode) {
       return { bloquant: true, message: "L'accession doit d'abord passer par le Bouturage." };
  
     const dejaFaite = codesHistorique.includes(etapeCode);
-if (dejaFaite)
-  return { bloquant: false, message: `⚠️ Cette étape a déjà été enregistrée pour cette accession. Dernière étape : ${codeEtapeParId([...historique].sort((a,b) => b.date - a.date || b.id - a.id)[0]?.etapeId)}.` };
+if (dejaFaite) {
+  const derniereCycle = [...historique].sort((a,b) => b.date - a.date || b.id - a.id)[0];
+  return { bloquant: false, message: `⚠️ Cette étape a déjà été enregistrée pour cette accession. Dernière étape : ${codeEtapeParId(derniereCycle?.etapeId)}${mentionPartenaire(derniereCycle?.codePartenaire)}.` };
+}
  
     if (etapeCode === "C_CONTENEUR") {
       const dejaDansTablardOuThermo = codesHistorique.some(c => c === "C_TABLARD" || c === "C_THERMOTHERAPIE");
@@ -411,6 +451,14 @@ if (dejaFaite)
   return null;
 }
  
+// ── Vérifie qu'on ne réenregistre pas deux fois le même tube/bouture à la même étape ──
+// dans la session en cours. Contrairement à validerEtapePlanteMere() (code simple), cette
+// vérification manquait pour tous les codes composites (Stockage, Microbouturage, Contrôle,
+// Transmission) — ils ne passaient jamais par validerEtapePlanteMere().
+function dejaScanneeDansSessionComposite(accId, etapeCode, codeMicrogreffe) {
+  return scansSession.some(s => s.ok && s.accId === accId && s.etapeCode === etapeCode && s.codeMicrogreffe === codeMicrogreffe);
+}
+ 
 // ── Validation par MICROGREFFE individuelle ──
 function validerSequenceParMG(accId, etapeCode, numMG) {
   const historiqueMG = cacheSuivi
@@ -425,7 +473,7 @@ function validerSequenceParMG(accId, etapeCode, numMG) {
  
   if (idxCible <= idxDerniere) {
     const derniereEtapeNom = nomEtapeParId(historiqueMG[0].etapeId) || derniereEtapeCode;
-    return `⚠️ Cette microgreffe a déjà passé cette étape. Dernière étape : ${derniereEtapeNom}.`;
+    return `⚠️ Cette microgreffe a déjà passé cette étape. Dernière étape : ${derniereEtapeNom}${mentionPartenaire(historiqueMG[0].codePartenaire)}.`;
 }
  
   return null;
@@ -488,7 +536,7 @@ document.getElementById("btn-confirmer").textContent = "Confirmer ✓";
     mgs.forEach(mg => selMG.innerHTML += `<option value="${mg}">${mg}</option>`);
     selMG.onchange = () => {
       const mg = selMG.value;
-      const mbs = cacheSuivi.filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) === ETAPE_OPTIONNELLE && r.codeMicrogreffe?.startsWith(mg + "-MB"));
+      const mbs = cacheSuivi.filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) === ETAPE_OPTIONNELLE && r.codeMicrogreffe?.startsWith(mg + "-"));
       const champMB = document.getElementById("champ-sel-mb");
       const selMB = document.getElementById("sel-microbouture");
       if (mbs.length > 0) {
@@ -527,6 +575,7 @@ async function demarrerSession() {
     cacheSuivi = suivi.id.map((id, i) => ({
       id, codeIntroId: suivi.CodeIntro[i], etapeId: suivi.Etape[i],
       codeMicrogreffe: suivi.CodeMicrogreffe ? suivi.CodeMicrogreffe[i] : null,
+      codePartenaire: suivi.CodePartenaire ? suivi.CodePartenaire[i] : null,
       date: suivi.Date[i]
     }));
   } catch(e) { console.warn("Impossible de recharger Suivi2 :", e); }
@@ -581,8 +630,8 @@ function rechercherAccession() {
  
   // ── Détection code composite (microgreffe ou microbouture) ──
   // Format : CODEACCESSION-M01 ou CODEACCESSION-M01-MB01
-  const partiesMG = input.match(/^(.+)-(M\d+)$/);
-  const partiesMB = input.match(/^(.+)-(M\d+)-(MB\d+)$/);
+  const partiesMG = input.match(RE_PARTIES_MG);
+  const partiesMB = input.match(RE_PARTIES_MB);
  
   if (partiesMB && (ETAPES_POST_MG.includes(etapeCode) || etapeCode === ETAPE_STOCKAGE)) {
     const codeAcc = partiesMB[1];
@@ -594,6 +643,9 @@ function rechercherAccession() {
     const acc = rechercheAcc.acc;
     const mgExiste = cacheSuivi.some(r => r.codeIntroId === acc.id && codeEtapeParId(r.etapeId) === ETAPE_MICROGREFFAGE && r.codeMicrogreffe === numMG);
     if (!mgExiste) { afficherAlerte("alerte-scan", `Microgreffe "${numMG}" introuvable pour cette accession.`, "erreur"); flashEcran("rouge"); return; }
+    if (dejaScanneeDansSessionComposite(acc.id, etapeCode, numMG + "-" + numMB)) {
+      afficherAlerte("alerte-scan", "Ce code a déjà été enregistré à cette étape dans la session en cours.", "erreur"); flashEcran("rouge"); return;
+    }
     accessionCourante = { code: codeAcc, ...acc, codeMicrogreffe: numMG + "-" + numMB };
     document.getElementById("scan-nomIntro").textContent = acc.nomIntro;
     document.getElementById("scan-nomVar").textContent = acc.nomVar;
@@ -613,6 +665,9 @@ function rechercherAccession() {
     const acc = rechercheAcc.acc;
     const mgExiste = cacheSuivi.some(r => r.codeIntroId === acc.id && codeEtapeParId(r.etapeId) === ETAPE_MICROGREFFAGE && r.codeMicrogreffe === numMG);
     if (!mgExiste) { afficherAlerte("alerte-scan", `Microgreffe "${numMG}" introuvable pour cette accession.`, "erreur"); flashEcran("rouge"); return; }
+    if (dejaScanneeDansSessionComposite(acc.id, etapeCode, numMG)) {
+      afficherAlerte("alerte-scan", "Ce code a déjà été enregistré à cette étape dans la session en cours.", "erreur"); flashEcran("rouge"); return;
+    }
     if (etapeCode !== ETAPE_STOCKAGE) {
   const erreur = validerSequenceParMG(acc.id, etapeCode, numMG);
   if (erreur) afficherAlerte("alerte-scan", erreur, "info");
@@ -708,8 +763,8 @@ function indexColonne(entetes, nom) { return entetes.findIndex(h => h.toLowerCas
  
 // ── Traite une ligne d'import : reproduit les branches de rechercherAccession() + enregistrerScan() ──
 async function traiterLigneImportIFV(codeBrut, nombreBrut, reussite, commentaireBrut, etapeCode) {
-  const partiesMB = codeBrut.match(/^(.+)-(M\d+)-(MB\d+)$/);
-  const partiesMG = !partiesMB ? codeBrut.match(/^(.+)-(M\d+)$/) : null;
+  const partiesMB = codeBrut.match(RE_PARTIES_MB);
+  const partiesMG = !partiesMB ? codeBrut.match(RE_PARTIES_MG) : null;
   const accepteComposite = ETAPES_POST_MG.includes(etapeCode) || etapeCode === ETAPE_STOCKAGE;
   const timestamp = Math.floor(new Date(session.date).getTime() / 1000);
  
@@ -726,23 +781,23 @@ async function traiterLigneImportIFV(codeBrut, nombreBrut, reussite, commentaire
     const nb = parseInt(nombreBrut);
     if (!nb || nb < 1) return { ok: false, message: "Colonne Nombre obligatoire (≥ 1) pour Microgreffage." };
     const existants = getMicrogreffes(acc.id);
-    const numerosExistants = existants.map(m => parseInt(m.replace("M", ""))).filter(n => !isNaN(n));
-    const depart = numerosExistants.length > 0 ? Math.max(...numerosExistants) + 1 : 1;
+    const depart = premierNumeroMGLibre(existants);
+    const estEchecMG = reussite === "Échec" || reussite === "Non conforme";
     const actions = [];
     for (let i = 0; i < nb; i++) {
-      const numMG = "M" + String(depart + i).padStart(2, "0");
+      const numMG = "µ" + String(depart + i).padStart(2, "0");
       actions.push(["AddRecord", "Suivi2", null, {
         CodeIntro: acc.id, Methode: session.methode, Etape: session.etape, Date: timestamp,
         Operateur: session.operateur, Emplacement: session.emplacement, CodePartenaire: session.codePartenaire,
-        CodeMicrogreffe: numMG, ...(commentaireBrut ? { Commentaires: commentaireBrut } : {})
+        CodeMicrogreffe: numMG, ...(reussite ? { Reussite: reussite } : {}), ...(commentaireBrut ? { Commentaires: commentaireBrut } : {})
       }]);
     }
     try {
       const result = await grist.docApi.applyUserActions(actions);
       result.retValues.forEach((gristId, i) => {
-        cacheSuivi.push({ id: gristId, codeIntroId: acc.id, etapeId: session.etape, codeMicrogreffe: "M" + String(depart + i).padStart(2, "0"), date: timestamp });
+        cacheSuivi.push({ id: gristId, codeIntroId: acc.id, etapeId: session.etape, codeMicrogreffe: "µ" + String(depart + i).padStart(2, "0"), date: timestamp });
       });
-      scansSession.push({ code: codeBrut, nom: `${acc.nomIntro} (${nb} microgreffes)`, ok: true, echec: false, gristId: result.retValues[0], multi: true, accId: acc.id, etapeCode });
+      scansSession.push({ code: codeBrut, nom: `${acc.nomIntro} (${nb} microgreffes)`, ok: true, echec: estEchecMG, gristId: result.retValues[0], multi: true, accId: acc.id, etapeCode });
       return { ok: true, message: "Importé", avertissement: avertissementMG };
     } catch (e) { return { ok: false, message: "Erreur Grist : " + e.message }; }
   }
@@ -759,21 +814,24 @@ async function traiterLigneImportIFV(codeBrut, nombreBrut, reussite, commentaire
     if (!mgExiste) return { ok: false, message: `Microgreffe "${numMG}" introuvable pour cette accession.` };
     const nb = parseInt(nombreBrut);
     if (!nb || nb < 1) return { ok: false, message: "Colonne Nombre obligatoire (≥ 1) pour Microbouturage." };
-    const mbExistantes = cacheSuivi.filter(r => r.codeIntroId === acc.id && codeEtapeParId(r.etapeId) === ETAPE_OPTIONNELLE && r.codeMicrogreffe?.startsWith(numMG + "-MB")).length;
+    const bExistantes = nbBouturesExistantes(acc.id, numMG);
+    const estEchecMB = reussite === "Échec" || reussite === "Non conforme";
+    if (dejaScanneeDansSessionComposite(acc.id, etapeCode, numMG)) return { ok: false, message: "Ce code a déjà été enregistré à cette étape (session ou import en cours)." };
     const actions = [];
     for (let i = 1; i <= nb; i++) {
       actions.push(["AddRecord", "Suivi2", null, {
         CodeIntro: acc.id, Methode: session.methode, Etape: session.etape, Date: timestamp,
         Operateur: session.operateur, Emplacement: session.emplacement, CodePartenaire: session.codePartenaire,
-        CodeMicrogreffe: numMG + "-MB" + String(mbExistantes + i).padStart(2, "0")
+        CodeMicrogreffe: numMG + "-" + lettreDepuisIndex(bExistantes + i),
+        ...(reussite ? { Reussite: reussite } : {})
       }]);
     }
     try {
       const result = await grist.docApi.applyUserActions(actions);
       result.retValues.forEach((gristId, i) => {
-        cacheSuivi.push({ id: gristId, codeIntroId: acc.id, etapeId: session.etape, codeMicrogreffe: numMG + "-MB" + String(mbExistantes + i + 1).padStart(2, "0"), date: timestamp });
+        cacheSuivi.push({ id: gristId, codeIntroId: acc.id, etapeId: session.etape, codeMicrogreffe: numMG + "-" + lettreDepuisIndex(bExistantes + i + 1), date: timestamp });
       });
-      scansSession.push({ code: codeBrut, nom: `${acc.nomIntro} — ${numMG} (${nb} microboutures)`, ok: true, echec: false, gristId: result.retValues[0], multi: true, accId: acc.id, etapeCode });
+      scansSession.push({ code: codeBrut, nom: `${acc.nomIntro} — ${numMG} (${nb} microboutures)`, ok: true, echec: estEchecMB, gristId: result.retValues[0], multi: true, accId: acc.id, etapeCode, codeMicrogreffe: numMG });
       return { ok: true, message: "Importé" };
     } catch (e) { return { ok: false, message: "Erreur Grist : " + e.message }; }
   }
@@ -788,6 +846,7 @@ async function traiterLigneImportIFV(codeBrut, nombreBrut, reussite, commentaire
     acc = rechercheAcc.acc; accId = acc.id;
     const mgExiste = cacheSuivi.some(r => r.codeIntroId === acc.id && codeEtapeParId(r.etapeId) === ETAPE_MICROGREFFAGE && r.codeMicrogreffe === numMG);
     if (!mgExiste) return { ok: false, message: `Microgreffe "${numMG}" introuvable pour cette accession.` };
+    if (dejaScanneeDansSessionComposite(acc.id, etapeCode, numMG + "-" + numMB)) return { ok: false, message: "Ce code a déjà été enregistré à cette étape (session ou import en cours)." };
     codeMicrogreffe = numMG + "-" + numMB;
     codeAffiche = codeAcc;
   } else if (partiesMG && accepteComposite) {
@@ -798,6 +857,7 @@ async function traiterLigneImportIFV(codeBrut, nombreBrut, reussite, commentaire
     acc = rechercheAcc.acc; accId = acc.id;
     const mgExiste = cacheSuivi.some(r => r.codeIntroId === acc.id && codeEtapeParId(r.etapeId) === ETAPE_MICROGREFFAGE && r.codeMicrogreffe === numMG);
     if (!mgExiste) return { ok: false, message: `Microgreffe "${numMG}" introuvable pour cette accession.` };
+    if (dejaScanneeDansSessionComposite(acc.id, etapeCode, numMG)) return { ok: false, message: "Ce code a déjà été enregistré à cette étape (session ou import en cours)." };
     codeMicrogreffe = numMG;
     codeAffiche = codeAcc;
     if (etapeCode !== ETAPE_STOCKAGE) avertissement = validerSequenceParMG(accId, etapeCode, numMG);
@@ -914,27 +974,28 @@ async function enregistrerScan(reussite) {
     const timestamp = Math.floor(new Date(session.date).getTime() / 1000);
  
     const existants = getMicrogreffes(accessionCourante.id);
-    const numerosExistants = existants.map(m => parseInt(m.replace("M",""))).filter(n => !isNaN(n));
-    const depart = numerosExistants.length > 0 ? Math.max(...numerosExistants) + 1 : 1;
+    const depart = premierNumeroMGLibre(existants);
  
+    const estEchecMG = reussite === "Échec" || reussite === "Non conforme";
     const actions = [];
     for (let i = 0; i < nb; i++) {
-      const numMG = "M" + String(depart + i).padStart(2, "0");
+      const numMG = "µ" + String(depart + i).padStart(2, "0");
       actions.push(["AddRecord", "Suivi2", null, {
         CodeIntro: accessionCourante.id, Methode: session.methode, Etape: session.etape,
         Date: timestamp, Operateur: session.operateur, Emplacement: session.emplacement,
         CodePartenaire: session.codePartenaire, CodeMicrogreffe: numMG,
+        ...(reussite ? { Reussite: reussite } : {}),
         ...(commentaire ? { Commentaires: commentaire } : {})
       }]);
     }
     try {
       const result = await grist.docApi.applyUserActions(actions);
       result.retValues.forEach((gristId, i) => {
-        const numMG = "M" + String(depart + i).padStart(2, "0");
+        const numMG = "µ" + String(depart + i).padStart(2, "0");
         cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, codeMicrogreffe: numMG, date: timestamp });
       });
-      scansSession.push({ code: accessionCourante.code, nom: `${accessionCourante.nomIntro} (${nb} microgreffes)`, ok: true, echec: false, gristId: result.retValues[0], multi: true, accId: accessionCourante.id, etapeCode: etapeCode });
-      mettreAJourCompteur(); flashEcran("vert"); annulerScan();
+      scansSession.push({ code: accessionCourante.code, nom: `${accessionCourante.nomIntro} (${nb} microgreffes)`, ok: true, echec: estEchecMG, gristId: result.retValues[0], multi: true, accId: accessionCourante.id, etapeCode: etapeCode });
+      mettreAJourCompteur(); flashEcran(estEchecMG ? "rouge" : "vert"); annulerScan();
     } catch(e) { afficherAlerte("alerte-scan", "Erreur : " + e.message, "erreur"); flashEcran("rouge"); }
     enRegistrement = false; bc.disabled = be.disabled = false;
     bc.textContent = "Confirmer ✓"; be.textContent = "Déclarer échec ✗";
@@ -952,23 +1013,25 @@ async function enregistrerScan(reussite) {
     bc.disabled = be.disabled = true;
     bc.innerHTML = 'Enregistrement <span class="spinner"></span>';
     const timestamp = Math.floor(new Date(session.date).getTime() / 1000);
-    const mbExistantes = cacheSuivi.filter(r => r.codeIntroId === accessionCourante.id && codeEtapeParId(r.etapeId) === ETAPE_OPTIONNELLE && r.codeMicrogreffe?.startsWith(mgParente + "-MB")).length;
+    const bExistantes = nbBouturesExistantes(accessionCourante.id, mgParente);
+    const estEchecMB = reussite === "Échec" || reussite === "Non conforme";
     const actions = [];
     for (let i = 1; i <= nb; i++) {
       actions.push(["AddRecord", "Suivi2", null, {
         CodeIntro: accessionCourante.id, Methode: session.methode, Etape: session.etape,
         Date: timestamp, Operateur: session.operateur, Emplacement: session.emplacement,
         CodePartenaire: session.codePartenaire,
-        CodeMicrogreffe: mgParente + "-MB" + String(mbExistantes + i).padStart(2, "0")
+        CodeMicrogreffe: mgParente + "-" + lettreDepuisIndex(bExistantes + i),
+        ...(reussite ? { Reussite: reussite } : {})
       }]);
     }
     try {
       const result = await grist.docApi.applyUserActions(actions);
       result.retValues.forEach((gristId, i) => {
-        cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, codeMicrogreffe: mgParente + "-MB" + String(mbExistantes+i+1).padStart(2,"0"), date: timestamp });
+        cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, codeMicrogreffe: mgParente + "-" + lettreDepuisIndex(bExistantes + i + 1), date: timestamp });
       });
-      scansSession.push({ code: accessionCourante.code, nom: `${accessionCourante.nomIntro} — ${mgParente} (${nb} microboutures)`, ok: true, echec: false, gristId: result.retValues[0], multi: true, accId: accessionCourante.id, etapeCode: etapeCode });
-      mettreAJourCompteur(); flashEcran("vert"); annulerScan();
+      scansSession.push({ code: accessionCourante.code, nom: `${accessionCourante.nomIntro} — ${mgParente} (${nb} microboutures)`, ok: true, echec: estEchecMB, gristId: result.retValues[0], multi: true, accId: accessionCourante.id, etapeCode: etapeCode, codeMicrogreffe: mgParente });
+      mettreAJourCompteur(); flashEcran(estEchecMB ? "rouge" : "vert"); annulerScan();
     } catch(e) { afficherAlerte("alerte-scan", "Erreur : " + e.message, "erreur"); flashEcran("rouge"); }
     enRegistrement = false; bc.disabled = be.disabled = false;
     bc.textContent = "Confirmer ✓"; be.textContent = "Déclarer échec ✗";
@@ -1012,9 +1075,9 @@ async function enregistrerScan(reussite) {
     const result = await grist.docApi.applyUserActions([["AddRecord", "Suivi2", null, fields]]);
     const gristId = result.retValues[0];
     cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, codeMicrogreffe, date: timestamp });
-    const estEchec = reussite === "Échec";
+    const estEchec = reussite === "Échec" || reussite === "Non conforme";
     const label = codeMicrogreffe ? `${accessionCourante.code} — ${codeMicrogreffe}` : accessionCourante.code;
-    scansSession.push({ code: label, nom: accessionCourante.nomIntro, ok: true, echec: estEchec, gristId, accId: accessionCourante.id, etapeCode: etapeCode });
+    scansSession.push({ code: label, nom: accessionCourante.nomIntro, ok: true, echec: estEchec, gristId, accId: accessionCourante.id, etapeCode: etapeCode, codeMicrogreffe });
     mettreAJourCompteur(); flashEcran(estEchec ? "rouge" : "vert"); annulerScan();
   } catch(e) {
     scansSession.push({ code: accessionCourante.code, nom: accessionCourante.nomIntro, ok: false, echec: false });
