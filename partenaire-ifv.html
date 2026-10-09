@@ -257,6 +257,10 @@ const RE_PARTIES_MG = new RegExp(`^(.+)-(${RE_TUBE})$`);
 const RE_PARTIES_MB = new RegExp(`^(.+)-(${RE_TUBE})-(${RE_BOUTURE})$`);
  
 // ── Premier numéro de tube libre (entier), en tenant compte des anciens codes "M0x" ET des nouveaux "µ0x" déjà pris ──
+// toUpperCase() transforme le micro "\u00B5" en grand Mu grec "\u039C" : on le remet au caractère stocké dans Grist.
+function normaliserCodeScan(brut) {
+  return String(brut).trim().toUpperCase().replace(/[\u039C\u03BC]/g, "\u00B5");
+}
 function premierNumeroMGLibre(codesExistants) {
   const numeros = codesExistants.map(m => parseInt(m.replace(/^[Mµ]/, ""), 10)).filter(n => !isNaN(n));
   return numeros.length > 0 ? Math.max(...numeros) + 1 : 1;
@@ -622,14 +626,14 @@ function afficherBlocsEtapeComposite(etapeCode, codeMicrogreffe) {
 }
  
 function rechercherAccession() {
-  const input = document.getElementById("scan-code").value.trim().toUpperCase();
+  const input = normaliserCodeScan(document.getElementById("scan-code").value);
   masquerAlerte("alerte-scan");
   if (!input) return;
  
   const etapeCode = codeEtapeParId(session.etape);
  
   // ── Détection code composite (microgreffe ou microbouture) ──
-  // Format : CODEACCESSION-M01 ou CODEACCESSION-M01-MB01
+  // Format : CODEACCESSION-µ01 ou CODEACCESSION-µ01-A (anciens codes CODEACCESSION-M01 / -M01-MB01 aussi acceptés)
   const partiesMG = input.match(RE_PARTIES_MG);
   const partiesMB = input.match(RE_PARTIES_MB);
  
@@ -802,9 +806,9 @@ async function traiterLigneImportIFV(codeBrut, nombreBrut, reussite, commentaire
     } catch (e) { return { ok: false, message: "Erreur Grist : " + e.message }; }
   }
  
-  // ── Microbouturage : Code = microgreffe parente composite (CODE-M01), Nombre = nb boutures ──
+  // ── Microbouturage : Code = microgreffe parente composite (CODE-µ01), Nombre = nb boutures ──
   if (etapeCode === ETAPE_OPTIONNELLE) {
-    if (!partiesMG) return { ok: false, message: "Code composite attendu (ex : CODE-M01, la microgreffe parente) pour Microbouturage." };
+    if (!partiesMG) return { ok: false, message: "Code composite attendu (ex : CODE-µ01, la microgreffe parente) pour Microbouturage." };
     const codeAcc = partiesMG[1], numMG = partiesMG[2];
     const rechercheAcc = trouverAccession(codeAcc);
     if (rechercheAcc.statut === "introuvable") return { ok: false, message: `Accession "${codeAcc}" introuvable.` };
@@ -864,7 +868,7 @@ async function traiterLigneImportIFV(codeBrut, nombreBrut, reussite, commentaire
   } else if (partiesMG || partiesMB) {
     return { ok: false, message: "Code composite non attendu pour cette étape." };
   } else {
-    if (ETAPES_POST_MG.includes(etapeCode)) return { ok: false, message: "Code composite attendu (ex : CODE-M01) pour cette étape." };
+    if (ETAPES_POST_MG.includes(etapeCode)) return { ok: false, message: "Code composite attendu (ex : CODE-µ01) pour cette étape." };
     const rechercheAcc = trouverAccession(codeBrut);
     if (rechercheAcc.statut === "introuvable") return { ok: false, message: `Accession "${codeBrut}" introuvable.` };
     if (rechercheAcc.statut === "mauvaise_campagne") return { ok: false, message: `Code existe mais pas pour la campagne ${session.campagne}.` };
@@ -921,7 +925,7 @@ async function importerCSV() {
   for (let i = 0; i < donnees.length; i++) {
     const l = donnees[i];
     const numLigne = i + 2;
-    const codeBrut = (l[idxCode] || "").trim().toUpperCase();
+    const codeBrut = normaliserCodeScan(l[idxCode] || "");
     if (!codeBrut) { resultats.push({ ligne: numLigne, code: "", ok: false, message: "Code manquant" }); continue; }
     const nombreBrut = idxNombre !== -1 ? (l[idxNombre] || "").trim() : "";
     const reussiteBrut = idxReussite !== -1 ? (l[idxReussite] || "").trim() : "";
@@ -1135,3 +1139,4 @@ function masquerAlerte(id) { const el=document.getElementById(id); el.className=
 </body>
 </html>
  
+Claude a terminé sa réponse.
