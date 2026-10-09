@@ -384,7 +384,23 @@ function mentionPartenaire(codePartenaire) {
   return (codePartenaire && codePartenaire !== session.codePartenaire) ? ` (par ${codePartenaire})` : "";
 }
  
+// ── Étape « À reprogrammer » : l'accession est considérée comme perdue pour la campagne ──
+// (à reprélever l'année suivante) — plus aucune autre étape ne peut lui être appliquée.
+// Détection par code OU nom d'étape contenant « reprogram » (le code Ref_Etapes exact est libre).
+function etapeEstAReprogrammer(etapeId) {
+  const norm = t => (t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return norm(codeEtapeParId(etapeId)).includes("reprogram") || norm(nomEtapeParId(etapeId)).includes("reprogram");
+}
+function blocageAReprogrammer(accId) {
+  const ligne = cacheSuivi.find(r => r.codeIntroId === accId && etapeEstAReprogrammer(r.etapeId));
+  const enSession = scansSession.some(sc => sc.ok && sc.accId === accId && sc.etapeCode && etapeEstAReprogrammer((cacheEtapes.find(e => e.code === sc.etapeCode) || {}).id));
+  if (!ligne && !enSession) return null;
+  return `⛔ Accession marquée « À reprogrammer »${ligne ? mentionPartenaire(ligne.codePartenaire) : ""} : plus aucune étape possible, à reprélever la campagne suivante.`;
+}
+ 
 function validerEtapePlanteMere(accId, etapeCode) {
+  const msgReprog = blocageAReprogrammer(accId);
+  if (msgReprog) return { bloquant: true, message: msgReprog };
   if (etapeCode === ETAPE_STOCKAGE) return null;
   const historique = cacheSuivi
     .filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) !== null);
@@ -647,6 +663,7 @@ function rechercherAccession() {
     const acc = rechercheAcc.acc;
     const mgExiste = cacheSuivi.some(r => r.codeIntroId === acc.id && codeEtapeParId(r.etapeId) === ETAPE_MICROGREFFAGE && r.codeMicrogreffe === numMG);
     if (!mgExiste) { afficherAlerte("alerte-scan", `Microgreffe "${numMG}" introuvable pour cette accession.`, "erreur"); flashEcran("rouge"); return; }
+    { const m = blocageAReprogrammer(acc.id); if (m) { afficherAlerte("alerte-scan", m, "erreur"); flashEcran("rouge"); return; } }
     if (dejaScanneeDansSessionComposite(acc.id, etapeCode, numMG + "-" + numMB)) {
       afficherAlerte("alerte-scan", "Ce code a déjà été enregistré à cette étape dans la session en cours.", "erreur"); flashEcran("rouge"); return;
     }
@@ -669,6 +686,7 @@ function rechercherAccession() {
     const acc = rechercheAcc.acc;
     const mgExiste = cacheSuivi.some(r => r.codeIntroId === acc.id && codeEtapeParId(r.etapeId) === ETAPE_MICROGREFFAGE && r.codeMicrogreffe === numMG);
     if (!mgExiste) { afficherAlerte("alerte-scan", `Microgreffe "${numMG}" introuvable pour cette accession.`, "erreur"); flashEcran("rouge"); return; }
+    { const m = blocageAReprogrammer(acc.id); if (m) { afficherAlerte("alerte-scan", m, "erreur"); flashEcran("rouge"); return; } }
     if (dejaScanneeDansSessionComposite(acc.id, etapeCode, numMG)) {
       afficherAlerte("alerte-scan", "Ce code a déjà été enregistré à cette étape dans la session en cours.", "erreur"); flashEcran("rouge"); return;
     }
@@ -816,6 +834,7 @@ async function traiterLigneImportIFV(codeBrut, nombreBrut, reussite, commentaire
     const acc = rechercheAcc.acc;
     const mgExiste = cacheSuivi.some(r => r.codeIntroId === acc.id && codeEtapeParId(r.etapeId) === ETAPE_MICROGREFFAGE && r.codeMicrogreffe === numMG);
     if (!mgExiste) return { ok: false, message: `Microgreffe "${numMG}" introuvable pour cette accession.` };
+    { const m = blocageAReprogrammer(acc.id); if (m) return { ok: false, message: m }; }
     const nb = parseInt(nombreBrut);
     if (!nb || nb < 1) return { ok: false, message: "Colonne Nombre obligatoire (≥ 1) pour Microbouturage." };
     const bExistantes = nbBouturesExistantes(acc.id, numMG);
@@ -850,6 +869,7 @@ async function traiterLigneImportIFV(codeBrut, nombreBrut, reussite, commentaire
     acc = rechercheAcc.acc; accId = acc.id;
     const mgExiste = cacheSuivi.some(r => r.codeIntroId === acc.id && codeEtapeParId(r.etapeId) === ETAPE_MICROGREFFAGE && r.codeMicrogreffe === numMG);
     if (!mgExiste) return { ok: false, message: `Microgreffe "${numMG}" introuvable pour cette accession.` };
+    { const m = blocageAReprogrammer(acc.id); if (m) return { ok: false, message: m }; }
     if (dejaScanneeDansSessionComposite(acc.id, etapeCode, numMG + "-" + numMB)) return { ok: false, message: "Ce code a déjà été enregistré à cette étape (session ou import en cours)." };
     codeMicrogreffe = numMG + "-" + numMB;
     codeAffiche = codeAcc;
@@ -861,6 +881,7 @@ async function traiterLigneImportIFV(codeBrut, nombreBrut, reussite, commentaire
     acc = rechercheAcc.acc; accId = acc.id;
     const mgExiste = cacheSuivi.some(r => r.codeIntroId === acc.id && codeEtapeParId(r.etapeId) === ETAPE_MICROGREFFAGE && r.codeMicrogreffe === numMG);
     if (!mgExiste) return { ok: false, message: `Microgreffe "${numMG}" introuvable pour cette accession.` };
+    { const m = blocageAReprogrammer(acc.id); if (m) return { ok: false, message: m }; }
     if (dejaScanneeDansSessionComposite(acc.id, etapeCode, numMG)) return { ok: false, message: "Ce code a déjà été enregistré à cette étape (session ou import en cours)." };
     codeMicrogreffe = numMG;
     codeAffiche = codeAcc;
@@ -1138,3 +1159,5 @@ function masquerAlerte(id) { const el=document.getElementById(id); el.className=
 </script>
 </body>
 </html>
+ 
+Claude a terminé sa réponse.
