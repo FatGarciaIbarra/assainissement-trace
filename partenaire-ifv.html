@@ -344,7 +344,8 @@ async function chargerDonnees() {
       etapeId:       suivi.Etape[i],
       codeMicrogreffe:  suivi.CodeMicrogreffe ? suivi.CodeMicrogreffe[i] : null,
       codePartenaire: suivi.CodePartenaire ? suivi.CodePartenaire[i] : null,
-      date:          suivi.Date[i]
+      date:          suivi.Date[i],
+      reussite:      suivi.Reussite ? suivi.Reussite[i] : null
     }));
   } catch(e) { afficherAlerte("alerte-config", "Erreur de chargement : " + e.message, "erreur"); }
 }
@@ -479,8 +480,33 @@ function dejaScanneeDansSessionComposite(accId, etapeCode, codeMicrogreffe) {
   return scansSession.some(s => s.ok && s.accId === accId && s.etapeCode === etapeCode && s.codeMicrogreffe === codeMicrogreffe);
 }
  
+// ── Alerte non bloquante : nombre de tubes viables de l'accession (Contrôle, Transmission) ──
+// Un tube (microgreffe ou microbouture) est viable tant que son dernier verdict explicite
+// (colonne Reussite renseignée) n'est ni « Échec » ni « Non conforme ».
+function nbTubesViables(accId) {
+  const parTube = new Map();
+  cacheSuivi.filter(r => r.codeIntroId === accId && r.codeMicrogreffe).forEach(r => {
+    if (!parTube.has(r.codeMicrogreffe)) parTube.set(r.codeMicrogreffe, []);
+    parTube.get(r.codeMicrogreffe).push(r);
+  });
+  let nb = 0;
+  parTube.forEach(lignes => {
+    const verdict = lignes.filter(r => r.reussite).sort((x, y) => y.date - x.date || y.id - x.id)[0];
+    if (!verdict || !["Échec", "Non conforme"].includes(verdict.reussite)) nb++;
+  });
+  return nb;
+}
+function alerteNbTubes(accId, etapeCode) {
+  if (etapeCode !== ETAPE_CONTROLE && etapeCode !== ETAPE_TRANSMISSION) return null;
+  const nb = nbTubesViables(accId);
+  if (nb >= SEUIL_MICROGREFFES) return null;
+  return `⚠️ Seulement ${nb} tube${nb > 1 ? "s" : ""} conforme${nb > 1 ? "s" : ""} sur ${SEUIL_MICROGREFFES} requis pour cette accession.`;
+}
+ 
 // ── Validation par MICROGREFFE individuelle ──
 function validerSequenceParMG(accId, etapeCode, numMG) {
+  // Le Contrôle peut être refait autant de fois que nécessaire (ex. nouveau contrôle après microbouturage) : pas d'avertissement « déjà passé ».
+  if (etapeCode === ETAPE_CONTROLE) return null;
   const historiqueMG = cacheSuivi
     .filter(r => r.codeIntroId === accId && r.codeMicrogreffe === numMG && codeEtapeParId(r.etapeId) !== null)
     .sort((a,b) => b.date - a.date || b.id - a.id);
@@ -596,7 +622,8 @@ async function demarrerSession() {
       id, codeIntroId: suivi.CodeIntro[i], etapeId: suivi.Etape[i],
       codeMicrogreffe: suivi.CodeMicrogreffe ? suivi.CodeMicrogreffe[i] : null,
       codePartenaire: suivi.CodePartenaire ? suivi.CodePartenaire[i] : null,
-      date: suivi.Date[i]
+      date: suivi.Date[i],
+      reussite: suivi.Reussite ? suivi.Reussite[i] : null
     }));
   } catch(e) { console.warn("Impossible de recharger Suivi2 :", e); }
   afficherEcran("ecran-scan");
@@ -667,6 +694,7 @@ function rechercherAccession() {
     if (dejaScanneeDansSessionComposite(acc.id, etapeCode, numMG + "-" + numMB)) {
       afficherAlerte("alerte-scan", "Ce code a déjà été enregistré à cette étape dans la session en cours.", "erreur"); flashEcran("rouge"); return;
     }
+    { const mt = alerteNbTubes(acc.id, etapeCode); if (mt) afficherAlerte("alerte-scan", mt, "info"); }
     accessionCourante = { code: codeAcc, ...acc, codeMicrogreffe: numMG + "-" + numMB };
     document.getElementById("scan-nomIntro").textContent = acc.nomIntro;
     document.getElementById("scan-nomVar").textContent = acc.nomVar;
@@ -690,10 +718,12 @@ function rechercherAccession() {
     if (dejaScanneeDansSessionComposite(acc.id, etapeCode, numMG)) {
       afficherAlerte("alerte-scan", "Ce code a déjà été enregistré à cette étape dans la session en cours.", "erreur"); flashEcran("rouge"); return;
     }
-    if (etapeCode !== ETAPE_STOCKAGE) {
-  const erreur = validerSequenceParMG(acc.id, etapeCode, numMG);
-  if (erreur) afficherAlerte("alerte-scan", erreur, "info");
-}
+    {
+      const erreur = etapeCode !== ETAPE_STOCKAGE ? validerSequenceParMG(acc.id, etapeCode, numMG) : null;
+      const mt = alerteNbTubes(acc.id, etapeCode);
+      const msg = [erreur, mt].filter(Boolean).join(" ");
+      if (msg) afficherAlerte("alerte-scan", msg, "info");
+    }
     accessionCourante = { code: codeAcc, ...acc, codeMicrogreffe: numMG };
     document.getElementById("scan-nomIntro").textContent = acc.nomIntro;
     document.getElementById("scan-nomVar").textContent = acc.nomVar;
@@ -817,7 +847,7 @@ async function traiterLigneImportIFV(codeBrut, nombreBrut, reussite, commentaire
     try {
       const result = await grist.docApi.applyUserActions(actions);
       result.retValues.forEach((gristId, i) => {
-        cacheSuivi.push({ id: gristId, codeIntroId: acc.id, etapeId: session.etape, codeMicrogreffe: "µ" + String(depart + i).padStart(2, "0"), date: timestamp });
+        cacheSuivi.push({ id: gristId, codeIntroId: acc.id, etapeId: session.etape, codeMicrogreffe: "µ" + String(depart + i).padStart(2, "0"), date: timestamp, reussite: reussite || null });
       });
       scansSession.push({ code: codeBrut, nom: `${acc.nomIntro} (${nb} microgreffes)`, ok: true, echec: estEchecMG, gristId: result.retValues[0], multi: true, accId: acc.id, etapeCode });
       return { ok: true, message: "Importé", avertissement: avertissementMG };
@@ -852,7 +882,7 @@ async function traiterLigneImportIFV(codeBrut, nombreBrut, reussite, commentaire
     try {
       const result = await grist.docApi.applyUserActions(actions);
       result.retValues.forEach((gristId, i) => {
-        cacheSuivi.push({ id: gristId, codeIntroId: acc.id, etapeId: session.etape, codeMicrogreffe: numMG + "-" + lettreDepuisIndex(bExistantes + i + 1), date: timestamp });
+        cacheSuivi.push({ id: gristId, codeIntroId: acc.id, etapeId: session.etape, codeMicrogreffe: numMG + "-" + lettreDepuisIndex(bExistantes + i + 1), date: timestamp, reussite: reussite || null });
       });
       scansSession.push({ code: codeBrut, nom: `${acc.nomIntro} — ${numMG} (${nb} microboutures)`, ok: true, echec: estEchecMB, gristId: result.retValues[0], multi: true, accId: acc.id, etapeCode, codeMicrogreffe: numMG });
       return { ok: true, message: "Importé" };
@@ -872,6 +902,7 @@ async function traiterLigneImportIFV(codeBrut, nombreBrut, reussite, commentaire
     { const m = blocageAReprogrammer(acc.id); if (m) return { ok: false, message: m }; }
     if (dejaScanneeDansSessionComposite(acc.id, etapeCode, numMG + "-" + numMB)) return { ok: false, message: "Ce code a déjà été enregistré à cette étape (session ou import en cours)." };
     codeMicrogreffe = numMG + "-" + numMB;
+    avertissement = alerteNbTubes(acc.id, etapeCode);
     codeAffiche = codeAcc;
   } else if (partiesMG && accepteComposite) {
     const codeAcc = partiesMG[1], numMG = partiesMG[2];
@@ -886,6 +917,7 @@ async function traiterLigneImportIFV(codeBrut, nombreBrut, reussite, commentaire
     codeMicrogreffe = numMG;
     codeAffiche = codeAcc;
     if (etapeCode !== ETAPE_STOCKAGE) avertissement = validerSequenceParMG(accId, etapeCode, numMG);
+    { const mt = alerteNbTubes(accId, etapeCode); if (mt) avertissement = [avertissement, mt].filter(Boolean).join(" "); }
   } else if (partiesMG || partiesMB) {
     return { ok: false, message: "Code composite non attendu pour cette étape." };
   } else {
@@ -912,7 +944,7 @@ async function traiterLigneImportIFV(codeBrut, nombreBrut, reussite, commentaire
   try {
     const result = await grist.docApi.applyUserActions([["AddRecord", "Suivi2", null, fields]]);
     const gristId = result.retValues[0];
-    cacheSuivi.push({ id: gristId, codeIntroId: accId, etapeId: session.etape, codeMicrogreffe, date: timestamp });
+    cacheSuivi.push({ id: gristId, codeIntroId: accId, etapeId: session.etape, codeMicrogreffe, date: timestamp, reussite: reussite || null });
     const estEchec = reussite === "Échec" || reussite === "Non conforme";
     const label = codeMicrogreffe ? `${codeAffiche} — ${codeMicrogreffe}` : codeAffiche;
     scansSession.push({ code: label, nom: acc.nomIntro, ok: true, echec: estEchec, gristId, accId, etapeCode });
@@ -1017,7 +1049,7 @@ async function enregistrerScan(reussite) {
       const result = await grist.docApi.applyUserActions(actions);
       result.retValues.forEach((gristId, i) => {
         const numMG = "µ" + String(depart + i).padStart(2, "0");
-        cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, codeMicrogreffe: numMG, date: timestamp });
+        cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, codeMicrogreffe: numMG, date: timestamp, reussite: reussite || null });
       });
       scansSession.push({ code: accessionCourante.code, nom: `${accessionCourante.nomIntro} (${nb} microgreffes)`, ok: true, echec: estEchecMG, gristId: result.retValues[0], multi: true, accId: accessionCourante.id, etapeCode: etapeCode });
       mettreAJourCompteur(); flashEcran(estEchecMG ? "rouge" : "vert"); annulerScan();
@@ -1053,7 +1085,7 @@ async function enregistrerScan(reussite) {
     try {
       const result = await grist.docApi.applyUserActions(actions);
       result.retValues.forEach((gristId, i) => {
-        cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, codeMicrogreffe: mgParente + "-" + lettreDepuisIndex(bExistantes + i + 1), date: timestamp });
+        cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, codeMicrogreffe: mgParente + "-" + lettreDepuisIndex(bExistantes + i + 1), date: timestamp, reussite: reussite || null });
       });
       scansSession.push({ code: accessionCourante.code, nom: `${accessionCourante.nomIntro} — ${mgParente} (${nb} microboutures)`, ok: true, echec: estEchecMB, gristId: result.retValues[0], multi: true, accId: accessionCourante.id, etapeCode: etapeCode, codeMicrogreffe: mgParente });
       mettreAJourCompteur(); flashEcran(estEchecMB ? "rouge" : "vert"); annulerScan();
@@ -1099,7 +1131,7 @@ async function enregistrerScan(reussite) {
   try {
     const result = await grist.docApi.applyUserActions([["AddRecord", "Suivi2", null, fields]]);
     const gristId = result.retValues[0];
-    cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, codeMicrogreffe, date: timestamp });
+    cacheSuivi.push({ id: gristId, codeIntroId: accessionCourante.id, etapeId: session.etape, codeMicrogreffe, date: timestamp, reussite: reussite || null });
     const estEchec = reussite === "Échec" || reussite === "Non conforme";
     const label = codeMicrogreffe ? `${accessionCourante.code} — ${codeMicrogreffe}` : accessionCourante.code;
     scansSession.push({ code: label, nom: accessionCourante.nomIntro, ok: true, echec: estEchec, gristId, accId: accessionCourante.id, etapeCode: etapeCode, codeMicrogreffe });
@@ -1160,3 +1192,4 @@ function masquerAlerte(id) { const el=document.getElementById(id); el.className=
 </body>
 </html>
  
+Claude a terminé sa réponse.
