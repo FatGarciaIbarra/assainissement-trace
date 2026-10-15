@@ -166,7 +166,7 @@ textarea { resize: vertical; min-height: 60px; }
       <div class="section-corps">
         <div class="champ"><label>Fichier</label><input type="file" id="import-fichier" accept=".csv"></div>
         <div style="font-size:11px;color:var(--texte-2);margin-bottom:10px;line-height:1.6">
-          Colonnes : <strong>CodeIntro</strong> (obligatoire, ou <code>CodeIntro-A</code> (code du tube) pour Multiplication/Contrôle — les anciens codes <code>CodeIntro-M01</code> restent reconnus , <strong>Nombre</strong> (Croissance en tube / Multiplication uniquement), <strong>Reussite</strong> (vide = confirmé/conforme, sinon <code>Echec</code>, <code>NonConforme</code> ou <code>Conforme</code>), <strong>NbApex</strong> (Cryothérapie / Régénération méristèmes uniquement), <strong>Souche</strong> (Débourrement : souches utilisées, S1 à S10, séparées par <code>+</code> ex. <code>S1+S3</code> ; autres étapes : une seule souche, uniquement si plusieurs souches ont été utilisées au débourrement), <strong>Commentaires</strong>.
+          Colonnes : <strong>CodeIntro</strong> (obligatoire, ou <code>CodeIntro-A</code> (code du tube) pour Multiplication/Contrôle — les anciens codes <code>CodeIntro-M01</code> restent reconnus , <strong>Nombre</strong> (Croissance en tube / Multiplication uniquement), <strong>Reussite</strong> (vide = confirmé/conforme, sinon <code>Echec</code>, <code>NonConforme</code> ou <code>Conforme</code>), <strong>NbApex</strong> (Cryothérapie / Régénération méristèmes uniquement), <strong>Souche</strong> (Débourrement : souches utilisées, S1 à S10, séparées par <code>+</code> ex. <code>S1+S3</code>, ou <code>Pot</code> pour une accession de serre ; autres étapes : une seule souche, uniquement si plusieurs souches ont été utilisées au débourrement), <strong>Commentaires</strong>.
         </div>
         <div class="btns"><button class="btn btn-principal" id="btn-import" onclick="importerCSV()">Importer</button></div>
         <div id="resultat-import"></div>
@@ -257,6 +257,8 @@ function prochainsCodesTubes(accId, nb) {
 // du tube, fixée à la Croissance en tube.
 const ETAPE_DEBOURREMENT = "DEBOURREMENT";
 const SOUCHES_DISPONIBLES = Array.from({ length: 10 }, (_, i) => "S" + (i + 1));
+// Accessions venant des serres : pas de souche, mention « Pot » à la place (exclusive avec S1…S10).
+const SOUCHE_POT = "Pot";
 function parserSouches(txt) {
   const l = String(txt || "").toUpperCase().split(/[,;+\/\s]+/).filter(Boolean);
   return [...new Set(l)];
@@ -280,6 +282,13 @@ function souchesAProposer(accId, etapeCode) {
   const u = soucheUtilisees(accId);
   return u.length >= 2 ? u : null;
 }
+// « Pot » exclut S1…S10 et inversement.
+function exclusionPot(cb) {
+  if (!cb.checked) return;
+  document.querySelectorAll("#souches-cases input").forEach(i => {
+    if ((cb.value === SOUCHE_POT) !== (i.value === SOUCHE_POT) ) i.checked = false;
+  });
+}
 // Affiche/masque les champs souche selon l'étape et l'accession.
 function preparerChampsSouche(accId, etapeCode) {
   const blocDeb = document.getElementById("champ-souches-debourrement");
@@ -287,8 +296,9 @@ function preparerChampsSouche(accId, etapeCode) {
   blocDeb.style.display = "none"; blocEtape.style.display = "none";
   if (etapeCode === ETAPE_DEBOURREMENT) {
     const dejaUtilisees = soucheUtilisees(accId);
-    document.getElementById("souches-cases").innerHTML = SOUCHES_DISPONIBLES.map(x =>
-      `<label style="display:inline-flex;align-items:center;gap:4px;font-size:12px"><input type="checkbox" value="${x}" ${dejaUtilisees.includes(x) ? "checked" : ""}> ${x}</label>`).join("");
+    const dejaPot = cacheSuivi.some(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) === ETAPE_DEBOURREMENT && parserSouches(r.souche).includes("POT"));
+    document.getElementById("souches-cases").innerHTML = [SOUCHE_POT, ...SOUCHES_DISPONIBLES].map(x =>
+      `<label style="display:inline-flex;align-items:center;gap:4px;font-size:12px"><input type="checkbox" value="${x}" onchange="exclusionPot(this)" ${(x === SOUCHE_POT ? dejaPot : dejaUtilisees.includes(x)) ? "checked" : ""}> ${x === SOUCHE_POT ? "Pot (serre)" : x}</label>`).join("");
     blocDeb.style.display = "";
     return;
   }
@@ -820,8 +830,13 @@ async function traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, co
   let souche = null;
   if (etapeCode === ETAPE_DEBOURREMENT) {
     const l = parserSouches(soucheBrut);
-    if (!l.length || !souchesValides(l)) return { ok: false, message: "Colonne Souche obligatoire pour le Débourrement (S1 à S10, séparées par + ou ,)." };
-    souche = SOUCHES_DISPONIBLES.filter(x => l.includes(x)).join(",");
+    if (l.includes("POT")) {
+      if (l.length > 1) return { ok: false, message: "« Pot » ne se combine pas avec une souche S1 à S10." };
+      souche = SOUCHE_POT;
+    } else {
+      if (!l.length || !souchesValides(l)) return { ok: false, message: "Colonne Souche obligatoire pour le Débourrement (S1 à S10 séparées par + ou ,, ou Pot)." };
+      souche = SOUCHES_DISPONIBLES.filter(x => l.includes(x)).join(",");
+    }
   } else if (codeMicrogreffeParent) {
     souche = soucheDuTube(accId, codeMicrogreffeParent);
   } else {
@@ -973,6 +988,7 @@ async function enregistrerScan(reussite) {
     const cochees = [...document.querySelectorAll("#souches-cases input:checked")].map(i => i.value);
     if (!cochees.length) return afficherAlerte("alerte-scan", "Choisir au moins une souche utilisée.", "erreur");
     souche = cochees.join(",");
+    if (cochees.includes(SOUCHE_POT) && cochees.length > 1) return afficherAlerte("alerte-scan", "« Pot » ne se combine pas avec une souche S1 à S10.", "erreur");
   } else if (accessionCourante.codeMicrogreffeParent) {
     souche = soucheDuTube(accessionCourante.id, accessionCourante.codeMicrogreffeParent);
   } else if (souchesAProposer(accessionCourante.id, etapeCode)) {
