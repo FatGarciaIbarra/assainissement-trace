@@ -98,7 +98,7 @@ textarea { resize: vertical; min-height: 60px; }
 <div class="flash-overlay" id="flash"></div>
 <div class="container">
   <div id="ecran-chargement" class="chargement">Connexion à Grist <span class="spinner"></span></div>
- 
+
   <div class="ecran" id="ecran-config">
     <div id="alerte-config" class="alerte"></div>
     <div class="partenaire-tag" id="partenaire-tag"></div>
@@ -128,7 +128,7 @@ textarea { resize: vertical; min-height: 60px; }
     </div>
     <div class="btns"><button class="btn btn-principal" onclick="demarrerSession()">Démarrer la session →</button></div>
   </div>
- 
+
   <div class="ecran" id="ecran-scan">
     <div class="session-badge">
       <div><div><strong id="badge-etape">—</strong></div><div class="session-info" id="badge-info">—</div></div>
@@ -139,6 +139,10 @@ textarea { resize: vertical; min-height: 60px; }
       <div class="section-titre">Scanner une accession</div>
       <div class="section-corps">
         <div class="champ"><label>Code intro</label><input type="text" id="scan-code" class="scan-input" placeholder="Scanner…" autocomplete="off"></div>
+        <div id="choix-souche-bloc" style="display:none;margin-bottom:10px">
+          <div class="info-label" style="margin-bottom:6px">Plusieurs souches existent pour ce code — laquelle ?</div>
+          <div class="btns" id="choix-souche-boutons"></div>
+        </div>
         <div id="scan-info-bloc" style="display:none">
           <div class="info-accession">
             <div class="info-item"><div class="info-label">Nom intro</div><div class="info-valeur" id="scan-nomIntro">—</div></div>
@@ -164,7 +168,7 @@ textarea { resize: vertical; min-height: 60px; }
       <div class="section-corps">
         <div class="champ"><label>Fichier</label><input type="file" id="import-fichier" accept=".csv"></div>
         <div style="font-size:11px;color:var(--texte-2);margin-bottom:10px;line-height:1.6">
-          Colonnes : <strong>CodeIntro</strong> (obligatoire, ou <code>CodeIntro-M01</code> pour Multiplication/Contrôle), <strong>Nombre</strong> (Croissance en tube / Multiplication uniquement), <strong>Reussite</strong> (vide = confirmé/conforme, sinon <code>Echec</code>, <code>NonConforme</code> ou <code>Conforme</code>), <strong>NbApex</strong> (Cryothérapie / Régénération méristèmes uniquement), <strong>Commentaires</strong>.
+          Colonnes : <strong>CodeIntro</strong> (obligatoire, ou <code>CodeIntro-A</code> (code du tube) pour Multiplication/Contrôle — les anciens codes <code>CodeIntro-M01</code> restent reconnus ; ajouter <code>-S2</code> avant l'étape si plusieurs souches existent pour ce code, ex. <code>CodeIntro-S2</code>, seulement pour les étapes hors Multiplication/Contrôle), <strong>Nombre</strong> (Croissance en tube / Multiplication uniquement), <strong>Reussite</strong> (vide = confirmé/conforme, sinon <code>Echec</code>, <code>NonConforme</code> ou <code>Conforme</code>), <strong>NbApex</strong> (Cryothérapie / Régénération méristèmes uniquement), <strong>Commentaires</strong>.
         </div>
         <div class="btns"><button class="btn btn-principal" id="btn-import" onclick="importerCSV()">Importer</button></div>
         <div id="resultat-import"></div>
@@ -176,7 +180,7 @@ textarea { resize: vertical; min-height: 60px; }
     </div>
     <div class="btns"><button class="btn btn-secondaire" onclick="terminerSession()">Terminer la session</button></div>
   </div>
- 
+
   <div class="ecran" id="ecran-fin">
     <div class="section">
       <div class="section-titre">Session terminée</div>
@@ -185,7 +189,7 @@ textarea { resize: vertical; min-height: 60px; }
     <div class="btns"><button class="btn btn-principal" onclick="nouvelleSession()">Nouvelle session</button></div>
   </div>
 </div>
- 
+
 <script>
 // ════════════════════════════════════════════════
 //  ▼▼▼ SEULE PARTIE À MODIFIER PAR PARTENAIRE ▼▼▼
@@ -209,7 +213,7 @@ const PARTENAIRE_CONFIG = {
 // ════════════════════════════════════════════════
 //  ▲▲▲ FIN DE LA PARTIE À MODIFIER ▲▲▲
 // ════════════════════════════════════════════════
- 
+
 const ETAPE_CRYOTHERAPIE = "B_CRYOTHERAPIE";
 const ETAPE_REGEN_MERISTE = "B_REGEN_MERISTE";
 const ETAPE_CROISSANCE_TUBE = "B_CROISSANCE";
@@ -217,15 +221,51 @@ const ETAPE_MULT_PLANTES = "B_MULT_PLANTES";
 const ETAPE_CONTROLE = "B_CONTROLE";
 // Étapes où le champ simple "Nombre d'apex traités" s'affiche (une seule ligne Suivi2, valeur écrite dans NbApex).
 const ETAPES_NB_APEX_SIMPLE = [ETAPE_CRYOTHERAPIE, ETAPE_REGEN_MERISTE];
-// Étapes scannées via un code composite CODEACCESSION-M01 (tube identifié individuellement).
+// Étapes scannées via un code composite CODEACCESSION-A (tube identifié individuellement).
 const ETAPES_COMPOSITE_M = [ETAPE_MULT_PLANTES, ETAPE_CONTROLE];
- 
+
+// ── Format des codes de tubes (colonne CodeMicrogreffe) ──
+// Nouveaux codes : tube de Croissance en tube = lettre(s) A, B, C… (puis AA, AB… après Z) ;
+// bouture de Multiplication in vitro = tube + numéro à 2 chiffres : A-01, A-02…
+// Les anciens codes déjà enregistrés (tube M01, bouture M01-MB01) ne sont pas renommés : ils restent reconnus.
+const RE_TUBE_CODE = /^(.+)-(M\d+|[A-Za-z]+)$/;
+// Retourne [complet, codeAccession, tube] si l'entrée est un code de tube ; null sinon.
+// Si l'entrée entière est déjà un CodeIntro connu (ex. un code contenant un tiret), c'est un code simple.
+function analyserCodeTube(input) {
+  if (cacheAccessions[input]) return null;
+  return input.match(RE_TUBE_CODE);
+}
+function lettreDepuisIndex(n) {
+  let s = "";
+  while (n > 0) { n--; s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26); }
+  return s;
+}
+function indexDepuisLettre(l) {
+  return [...l].reduce((acc, c) => acc * 26 + (c.charCodeAt(0) - 64), 0);
+}
+// Codes de tubes (lettres) à créer pour une accession : continue après la dernière lettre déjà utilisée.
+function prochainsCodesTubes(accId, nb) {
+  const existants = cacheSuivi
+    .filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) === ETAPE_CROISSANCE_TUBE && r.codeMicrogreffe && /^[A-Z]+$/.test(r.codeMicrogreffe))
+    .map(r => indexDepuisLettre(r.codeMicrogreffe));
+  const depart = existants.length ? Math.max(...existants) : 0;
+  return Array.from({ length: nb }, (_, i) => lettreDepuisIndex(depart + i + 1));
+}
+// Codes de boutures (numéros) à créer sous un tube : continue après les boutures déjà présentes (anciennes -MB01 comprises).
+function prochainsCodesBoutures(accId, tube, nb) {
+  const deja = cacheSuivi.filter(r =>
+    r.codeIntroId === accId && codeEtapeParId(r.etapeId) === ETAPE_MULT_PLANTES &&
+    r.codeMicrogreffe && r.codeMicrogreffe.startsWith(tube + "-")
+  ).length;
+  return Array.from({ length: nb }, (_, i) => `${tube}-${String(deja + i + 1).padStart(2, "0")}`);
+}
+
 let cacheAccessions = {}, cacheOperateurs = [], cacheEtapes = [];
 let cacheSuivi = [];
 let session = {}, scansSession = [], accessionCourante = null, enRegistrement = false;
- 
+
 grist.ready({ requiredAccess: "full" });
- 
+
 async function init() {
   appliquerConfig();
   await chargerDonnees();
@@ -235,14 +275,14 @@ async function init() {
   document.getElementById("cfg-methode").addEventListener("change", filtrerEtapesConfig);
 }
 window.addEventListener("load", init);
- 
+
 function appliquerConfig() {
   document.getElementById("partenaire-tag").textContent = PARTENAIRE_CONFIG.nom;
   document.title = "Saisie — " + PARTENAIRE_CONFIG.nom;
 }
- 
+
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
- 
+
 async function chargerDonnees() {
   try {
     const [ops, etapes, accs] = await Promise.all([
@@ -254,11 +294,11 @@ async function chargerDonnees() {
     const selOp = document.getElementById("cfg-operateur");
     selOp.innerHTML = '<option value="">— Choisir —</option>';
     cacheOperateurs.forEach(op => selOp.innerHTML += `<option value="${op.id}">${op.nom}</option>`);
- 
+
     const exclus = PARTENAIRE_CONFIG.etapesExclues || [];
     cacheEtapes = etapes.id.map((id, i) => ({ id, code: etapes.CodeEtape[i], nom: etapes.NomEtape[i], methode: etapes.Methode[i], ordre: etapes.OrdreAffichage[i] }))
       .filter(e => !exclus.includes(e.code)).sort((a,b) => a.ordre - b.ordre);
- 
+
     const mc = PARTENAIRE_CONFIG.methodes || [];
     const toutes = [...new Set(cacheEtapes.filter(e => e.methode !== "Commune").map(e => e.methode))];
     const dispo = mc.length > 0 ? toutes.filter(m => mc.includes(m)) : toutes;
@@ -266,16 +306,16 @@ async function chargerDonnees() {
     selM.innerHTML = '<option value="">— Choisir —</option>';
     dispo.forEach(m => selM.innerHTML += `<option value="${m}">${m}</option>`);
     if (PARTENAIRE_CONFIG.methodeImposee && dispo.length === 1) { selM.value = dispo[0]; selM.disabled = true; filtrerEtapesConfig(); }
- 
+
     accs.id.forEach((id, i) => {
       const c = accs.CodeIntro[i];
       if (!c) return;
       const code = c.toUpperCase();
-      const entree = { id, nomIntro: accs.NomIntro[i] || "—", nomVar: accs.NomVar[i] || "—", campagne: accs.Campagne[i] || null };
+      const entree = { id, nomIntro: accs.NomIntro[i] || "—", nomVar: accs.NomVar[i] || "—", campagne: accs.Campagne[i] || null, souche: accs.Souche ? (accs.Souche[i] || null) : null };
       if (!cacheAccessions[code]) cacheAccessions[code] = [];
       cacheAccessions[code].push(entree);
     });
- 
+
     const suivi = await grist.docApi.fetchTable("Suivi2");
     cacheSuivi = suivi.id.map((id, i) => ({
       id,
@@ -288,7 +328,7 @@ async function chargerDonnees() {
     }));
   } catch(e) { afficherAlerte("alerte-config", "Erreur de chargement : " + e.message, "erreur"); }
 }
- 
+
 function filtrerEtapesConfig() {
   const m = document.getElementById("cfg-methode").value;
   const sel = document.getElementById("cfg-etape");
@@ -296,21 +336,42 @@ function filtrerEtapesConfig() {
   if (!m) return;
   cacheEtapes.filter(e => e.methode === m || e.methode === "Commune").forEach(e => sel.innerHTML += `<option value="${e.id}">${e.nom}</option>`);
 }
- 
+
 function codeEtapeParId(id) { const e = cacheEtapes.find(e => e.id === id); return e ? e.code : null; }
 function nomEtapeParId(id)  { const e = cacheEtapes.find(e => e.id === id); return e ? e.nom : null; }
- 
+
 // ── Résolution d'une accession en tenant compte de la campagne de session ──
-// Un même CodeIntro peut exister pour plusieurs campagnes (reprise après échec) :
-// on désambiguïse avec la campagne choisie en début de session.
+// Un même CodeIntro peut exister pour plusieurs campagnes (reprise après échec), et pour
+// une même campagne s'il y a plusieurs souches prélevées (colonne Souche, S1/S2/… — cas rare,
+// seulement quand le matériel d'une souche seule ne suffit pas) : on désambiguïse d'abord par
+// la campagne choisie en session, puis par la souche si plusieurs lignes restent (statut "ambigu",
+// à trancher par l'opérateur via un choix explicite — voir demanderChoixSouche()).
 function trouverAccession(code) {
   const candidats = cacheAccessions[code];
   if (!candidats || candidats.length === 0) return { statut: "introuvable" };
-  const match = candidats.find(a => a.campagne === session.campagne);
-  if (!match) return { statut: "mauvaise_campagne" };
-  return { statut: "ok", acc: match };
+  const matches = candidats.filter(a => a.campagne === session.campagne);
+  if (matches.length === 0) return { statut: "mauvaise_campagne" };
+  if (matches.length > 1) return { statut: "ambigu", candidats: matches };
+  return { statut: "ok", acc: matches[0] };
 }
- 
+
+// ── Résolution d'une accession par le tube qu'elle porte (étapes Multiplication/Contrôle) ──
+// Contrairement au scan simple, pas besoin de demander la souche à l'opérateur ici : le numéro
+// de tube (M0x) a été attribué à UNE souche précise lors de la Croissance en tube, donc on
+// retrouve directement la bonne ligne Accessions en cherchant qui porte ce tube — même quand
+// plusieurs souches existent pour ce CodeIntro/cette campagne.
+function trouverAccessionParTube(codeAcc, numMG) {
+  const candidats = cacheAccessions[codeAcc];
+  if (!candidats || candidats.length === 0) return { statut: "introuvable" };
+  const memeCampagne = candidats.filter(a => a.campagne === session.campagne);
+  if (memeCampagne.length === 0) return { statut: "mauvaise_campagne" };
+  const avecTube = memeCampagne.filter(a => cacheSuivi.some(r =>
+    r.codeIntroId === a.id && codeEtapeParId(r.etapeId) === ETAPE_CROISSANCE_TUBE && r.codeMicrogreffe === numMG
+  ));
+  if (avecTube.length === 0) return { statut: "tube_introuvable" };
+  return { statut: "ok", acc: avecTube[0] };
+}
+
 // ── Détermine le partenaire "titulaire" actuel de l'accession ──
 // C'est celui de sa dernière RECEPTION réussie, tant qu'aucun CHGT_METHODE n'a eu lieu depuis.
 // Retourne null si jamais réceptionnée avec succès, ou si un CHGT_METHODE l'a rendue "libre" depuis.
@@ -334,7 +395,7 @@ function partenaireActuel(accId) {
   if (chgtMethodeApres) return null;
   return derniereReception.codePartenaire;
 }
- 
+
 // ── Vérifie la continuité partenaire ──
 // RECEPTION est une porte à usage unique par campagne : dès qu'une réception existe (même
 // partenaire compris), une nouvelle réception est bloquée tant qu'aucun CHGT_METHODE n'a eu lieu.
@@ -344,25 +405,25 @@ function partenaireActuel(accId) {
 function verifierContinuitePartenaire(accId, etapeCode) {
   if (etapeCode === "CHGT_METHODE") return null;
   const titulaire = partenaireActuel(accId);
- 
+
   if (etapeCode === "RECEPTION") {
     if (!titulaire) return null;
     return titulaire === session.codePartenaire
       ? `Cette accession a déjà été réceptionnée pour cette campagne. Un changement de méthode est requis avant une nouvelle réception.`
       : `Cette accession a déjà été réceptionnée par un autre partenaire (${titulaire}) pour cette campagne. Un changement de méthode est requis avant une nouvelle réception.`;
   }
- 
+
   if (!titulaire) return `Cette accession n'a pas encore été réceptionnée. Elle doit d'abord passer par l'étape Réception.`;
   if (titulaire === session.codePartenaire) return null;
   return `Cette accession est actuellement suivie par ${titulaire}. Un changement de méthode (CHGT_METHODE) est requis avant qu'un autre partenaire n'intervienne.`;
 }
- 
+
 // ── Vérifie qu'on ne réenregistre pas deux fois la même accession à la même étape ──
 // dans la session en cours (même logique que le formulaire IFV).
 function dejaScanneeDansSession(accId, etapeCode) {
   return scansSession.some(s => s.ok && s.accId === accId && s.etapeCode === etapeCode);
 }
- 
+
 // ── Avertit (non bloquant) si cette étape a déjà été enregistrée pour cette accession ──
 // (même campagne, toute date confondue) — même logique que le cycle libre d'IFV
 // (Conteneur/Tablard/Thermothérapie) : ne bloque pas, juste un rappel de la dernière étape faite.
@@ -374,7 +435,7 @@ function alerteEtapeDejaFaite(accId, etapeCode) {
   const derniereNom = derniere ? (nomEtapeParId(derniere.etapeId) || codeEtapeParId(derniere.etapeId)) : null;
   return `⚠️ Cette étape a déjà été enregistrée pour cette accession. Dernière étape enregistrée : ${derniereNom}.`;
 }
- 
+
 // ── Avertit (non bloquant) si un échec (ou une non-conformité) a déjà été enregistré ──
 // pour cette accession dans cette campagne. L'opérateur reste libre de continuer — c'est
 // une information, pas une barrière, volontairement pour éviter de trop bloquer le formulaire.
@@ -386,7 +447,7 @@ function alerteEchecAnterieur(accId) {
   const nomEtape = nomEtapeParId(echecs[0].etapeId) || codeEtapeParId(echecs[0].etapeId);
   return `⚠️ Un échec/non-conformité a été enregistré précédemment pour cette accession (étape : ${nomEtape}). Vérifier avant de continuer.`;
 }
- 
+
 // ── Avertit (non bloquant) si CE TUBE précis a déjà fait l'objet d'un contrôle de conformité ──
 // (contrôle au niveau du tube, pas de l'accession entière — une accession peut avoir plusieurs
 // tubes à des stades différents).
@@ -397,7 +458,7 @@ function alerteControleAnterieur(accId, numMG) {
   if (!precedent) return null;
   return `⚠️ Ce tube a déjà été contrôlé. Résultat précédent : ${precedent.reussite || "Conforme"}.`;
 }
- 
+
 // ── Configure les boutons Confirmer/Échec selon l'étape : libellés "Conforme/Non conforme" ──
 // pour le contrôle, libellés standards "Confirmer/Déclarer échec" sinon.
 function configurerBoutons(etapeCode) {
@@ -415,7 +476,7 @@ function configurerBoutons(etapeCode) {
     be.onclick = () => enregistrerScan("Échec");
   }
 }
- 
+
 async function demarrerSession() {
   masquerAlerte("alerte-config");
   const date = document.getElementById("cfg-date").value;
@@ -453,50 +514,126 @@ async function demarrerSession() {
   ni.addEventListener("input", debounce(e => { if (e.target.value.trim().length > 2) rechercherAccession(); }, 350));
   setTimeout(() => ni.focus(), 100);
 }
- 
+
+// ── Choix de souche (cas ambigu : plusieurs lignes Accessions pour le même CodeIntro/campagne) ──
+let choixSoucheCallback = null;
+let choixSoucheCandidats = [];
+
+function demanderChoixSouche(candidats, callback) {
+  masquerChoixSouche();
+  document.getElementById("scan-info-bloc").style.display = "none";
+  choixSoucheCallback = callback;
+  choixSoucheCandidats = [...candidats].sort((a,b) => (a.souche || "").localeCompare(b.souche || ""));
+  document.getElementById("choix-souche-boutons").innerHTML = choixSoucheCandidats
+    .map((c, i) => `<button class="btn btn-secondaire" onclick="choisirSouche(${i})">${c.souche || "(non précisée)"}</button>`).join("");
+  document.getElementById("choix-souche-bloc").style.display = "block";
+}
+
+function choisirSouche(index) {
+  const acc = choixSoucheCandidats[index];
+  const cb = choixSoucheCallback;
+  masquerChoixSouche();
+  if (cb) cb(acc);
+}
+
+function masquerChoixSouche() {
+  document.getElementById("choix-souche-bloc").style.display = "none";
+  document.getElementById("choix-souche-boutons").innerHTML = "";
+  choixSoucheCallback = null;
+  choixSoucheCandidats = [];
+}
+
+// ── Poursuite du scan une fois l'accession/souche résolue (code composite CODE-A) ──
+function continuerCompositeAvecAccession(acc, codeAcc, numMG, etapeCode) {
+  const conflit = verifierContinuitePartenaire(acc.id, etapeCode);
+  if (conflit) { afficherAlerte("alerte-scan", conflit, "erreur"); flashEcran("rouge"); return; }
+
+  accessionCourante = { code: codeAcc, ...acc, codeMicrogreffeParent: numMG };
+  document.getElementById("scan-nomIntro").textContent = acc.nomIntro;
+  document.getElementById("scan-nomVar").textContent = acc.nomVar;
+  document.getElementById("scan-info-bloc").style.display = "block";
+  document.getElementById("scan-commentaire").value = "";
+  document.getElementById("champ-nbApex").style.display = "none";
+  document.getElementById("champ-nbApexLignes").style.display = "none";
+  document.getElementById("champ-nbBoutures").style.display = (etapeCode === ETAPE_MULT_PLANTES) ? "" : "none";
+  document.getElementById("scan-nbBoutures").value = "";
+  const titreBloc = document.querySelector("#champs-communs .champs-acc-titre");
+  if (titreBloc) titreBloc.textContent = (etapeCode === ETAPE_CONTROLE ? "Contrôle — " : "Multiplication — ") + numMG + (acc.souche ? ` (${acc.souche})` : "");
+  configurerBoutons(etapeCode);
+  const alertesInfo = [alerteEchecAnterieur(acc.id)];
+  if (etapeCode === ETAPE_CONTROLE) alertesInfo.push(alerteControleAnterieur(acc.id, numMG));
+  const alertesFiltrees = alertesInfo.filter(Boolean);
+  if (alertesFiltrees.length) afficherAlerte("alerte-scan", alertesFiltrees.join(" · "), "info");
+  setTimeout(() => document.getElementById("btn-confirmer").focus(), 50);
+}
+
+// ── Poursuite du scan une fois l'accession/souche résolue (code simple CodeIntro) ──
+function continuerSimpleAvecAccession(acc, code, etapeCode) {
+  if (ETAPES_COMPOSITE_M.includes(etapeCode)) {
+    accessionCourante = null;
+    document.getElementById("scan-info-bloc").style.display = "none";
+    afficherAlerte("alerte-scan", `Veuillez scanner le code du tube (ex : ${code}-A).`, "info");
+    return;
+  }
+
+  if (dejaScanneeDansSession(acc.id, etapeCode)) {
+    accessionCourante = null;
+    document.getElementById("scan-info-bloc").style.display = "none";
+    afficherAlerte("alerte-scan", "Cette accession a déjà été enregistrée à cette étape dans la session en cours.", "erreur");
+    flashEcran("rouge");
+    return;
+  }
+
+  const conflit = verifierContinuitePartenaire(acc.id, etapeCode);
+  if (conflit) {
+    accessionCourante = null;
+    document.getElementById("scan-info-bloc").style.display = "none";
+    afficherAlerte("alerte-scan", conflit, "erreur"); flashEcran("rouge");
+    return;
+  }
+
+  accessionCourante = { code, ...acc };
+  document.getElementById("scan-nomIntro").textContent = acc.nomIntro;
+  document.getElementById("scan-nomVar").textContent = acc.nomVar;
+  document.getElementById("scan-info-bloc").style.display = "block";
+  document.getElementById("scan-commentaire").value = "";
+  document.getElementById("champ-nbApex").style.display = ETAPES_NB_APEX_SIMPLE.includes(etapeCode) ? "" : "none";
+  document.getElementById("scan-nbApex").value = "";
+  document.getElementById("champ-nbApexLignes").style.display = (etapeCode === ETAPE_CROISSANCE_TUBE) ? "" : "none";
+  document.getElementById("scan-nbApexLignes").value = "";
+  document.getElementById("champ-nbBoutures").style.display = "none";
+  const titreBloc = document.querySelector("#champs-communs .champs-acc-titre");
+  if (titreBloc) titreBloc.textContent = "Données complémentaires" + (acc.souche ? ` — ${acc.souche}` : "");
+  configurerBoutons(etapeCode);
+  const alertesInfo = [alerteEtapeDejaFaite(acc.id, etapeCode), alerteEchecAnterieur(acc.id)].filter(Boolean);
+  if (alertesInfo.length) afficherAlerte("alerte-scan", alertesInfo.join(" · "), "info");
+  setTimeout(() => document.getElementById("btn-confirmer").focus(), 50);
+}
+
 function rechercherAccession() {
   const input = document.getElementById("scan-code").value.trim().toUpperCase();
   masquerAlerte("alerte-scan");
+  masquerChoixSouche();
   if (!input) return;
   const etapeCode = codeEtapeParId(session.etape);
- 
-  // ── Détection code composite CODEACCESSION-M01 (Multiplication plante in vitro uniquement) ──
+
+  // ── Détection code composite CODEACCESSION-A (Multiplication plante in vitro uniquement) ──
   // Le code M01 est stocké seul dans CodeMicrogreffe (sans le CodeIntro devant), mais l'opérateur
-  // scanne le code composite (comme IFV) car c'est ce qui identifie physiquement le tube.
-  const partiesMG = input.match(/^(.+)-(M\d+)$/);
+  // scanne le code composite (comme IFV) car c'est ce qui identifie physiquement le tube. Le tube
+  // appartenant à UNE souche précise, trouverAccessionParTube() résout directement la bonne ligne
+  // même s'il y a plusieurs souches pour ce CodeIntro — pas besoin de demander à l'opérateur ici.
+  const partiesMG = analyserCodeTube(input);
   if (partiesMG && ETAPES_COMPOSITE_M.includes(etapeCode)) {
     const codeAcc = partiesMG[1];
     const numMG   = partiesMG[2];
-    const rechercheAcc = trouverAccession(codeAcc);
+    const rechercheAcc = trouverAccessionParTube(codeAcc, numMG);
     if (rechercheAcc.statut === "introuvable") { afficherAlerte("alerte-scan", `Accession "${codeAcc}" introuvable.`, "erreur"); flashEcran("rouge"); return; }
     if (rechercheAcc.statut === "mauvaise_campagne") { afficherAlerte("alerte-scan", `Ce code existe mais pas pour la campagne ${session.campagne}.`, "erreur"); flashEcran("rouge"); return; }
-    const acc = rechercheAcc.acc;
-    const mgExiste = cacheSuivi.some(r => r.codeIntroId === acc.id && codeEtapeParId(r.etapeId) === ETAPE_CROISSANCE_TUBE && r.codeMicrogreffe === numMG);
-    if (!mgExiste) { afficherAlerte("alerte-scan", `Code "${numMG}" introuvable pour cette accession (étape Croissance en tube).`, "erreur"); flashEcran("rouge"); return; }
- 
-    const conflit = verifierContinuitePartenaire(acc.id, etapeCode);
-    if (conflit) { afficherAlerte("alerte-scan", conflit, "erreur"); flashEcran("rouge"); return; }
- 
-    accessionCourante = { code: codeAcc, ...acc, codeMicrogreffeParent: numMG };
-    document.getElementById("scan-nomIntro").textContent = acc.nomIntro;
-    document.getElementById("scan-nomVar").textContent = acc.nomVar;
-    document.getElementById("scan-info-bloc").style.display = "block";
-    document.getElementById("scan-commentaire").value = "";
-    document.getElementById("champ-nbApex").style.display = "none";
-    document.getElementById("champ-nbApexLignes").style.display = "none";
-    document.getElementById("champ-nbBoutures").style.display = (etapeCode === ETAPE_MULT_PLANTES) ? "" : "none";
-    document.getElementById("scan-nbBoutures").value = "";
-    const titreBloc = document.querySelector("#champs-communs .champs-acc-titre");
-    if (titreBloc) titreBloc.textContent = (etapeCode === ETAPE_CONTROLE ? "Contrôle — " : "Multiplication — ") + numMG;
-    configurerBoutons(etapeCode);
-    const alertesInfo = [alerteEchecAnterieur(acc.id)];
-    if (etapeCode === ETAPE_CONTROLE) alertesInfo.push(alerteControleAnterieur(acc.id, numMG));
-    const alertesFiltrees = alertesInfo.filter(Boolean);
-    if (alertesFiltrees.length) afficherAlerte("alerte-scan", alertesFiltrees.join(" · "), "info");
-    setTimeout(() => document.getElementById("btn-confirmer").focus(), 50);
+    if (rechercheAcc.statut === "tube_introuvable") { afficherAlerte("alerte-scan", `Code "${numMG}" introuvable pour cette accession (étape Croissance en tube).`, "erreur"); flashEcran("rouge"); return; }
+    continuerCompositeAvecAccession(rechercheAcc.acc, codeAcc, numMG, etapeCode);
     return;
   }
- 
+
   // ── Code simple (accession) ──
   const code = input;
   if (partiesMG && !ETAPES_COMPOSITE_M.includes(etapeCode)) {
@@ -508,47 +645,9 @@ function rechercherAccession() {
   }
   const rechercheAcc = trouverAccession(code);
   if (rechercheAcc.statut === "ok") {
-    const acc = rechercheAcc.acc;
- 
-    if (ETAPES_COMPOSITE_M.includes(etapeCode)) {
-      accessionCourante = null;
-      document.getElementById("scan-info-bloc").style.display = "none";
-      afficherAlerte("alerte-scan", `Veuillez scanner le code du tube (ex : ${code}-M01).`, "info");
-      return;
-    }
- 
-    if (dejaScanneeDansSession(acc.id, etapeCode)) {
-      accessionCourante = null;
-      document.getElementById("scan-info-bloc").style.display = "none";
-      afficherAlerte("alerte-scan", "Cette accession a déjà été enregistrée à cette étape dans la session en cours.", "erreur");
-      flashEcran("rouge");
-      return;
-    }
- 
-    const conflit = verifierContinuitePartenaire(acc.id, etapeCode);
-    if (conflit) {
-      accessionCourante = null;
-      document.getElementById("scan-info-bloc").style.display = "none";
-      afficherAlerte("alerte-scan", conflit, "erreur"); flashEcran("rouge");
-      return;
-    }
- 
-    accessionCourante = { code, ...acc };
-    document.getElementById("scan-nomIntro").textContent = acc.nomIntro;
-    document.getElementById("scan-nomVar").textContent = acc.nomVar;
-    document.getElementById("scan-info-bloc").style.display = "block";
-    document.getElementById("scan-commentaire").value = "";
-    document.getElementById("champ-nbApex").style.display = ETAPES_NB_APEX_SIMPLE.includes(etapeCode) ? "" : "none";
-    document.getElementById("scan-nbApex").value = "";
-    document.getElementById("champ-nbApexLignes").style.display = (etapeCode === ETAPE_CROISSANCE_TUBE) ? "" : "none";
-    document.getElementById("scan-nbApexLignes").value = "";
-    document.getElementById("champ-nbBoutures").style.display = "none";
-    const titreBloc = document.querySelector("#champs-communs .champs-acc-titre");
-    if (titreBloc) titreBloc.textContent = "Données complémentaires";
-    configurerBoutons(etapeCode);
-    const alertesInfo = [alerteEtapeDejaFaite(acc.id, etapeCode), alerteEchecAnterieur(acc.id)].filter(Boolean);
-    if (alertesInfo.length) afficherAlerte("alerte-scan", alertesInfo.join(" · "), "info");
-    setTimeout(() => document.getElementById("btn-confirmer").focus(), 50);
+    continuerSimpleAvecAccession(rechercheAcc.acc, code, etapeCode);
+  } else if (rechercheAcc.statut === "ambigu") {
+    demanderChoixSouche(rechercheAcc.candidats, (acc) => continuerSimpleAvecAccession(acc, code, etapeCode));
   } else {
     accessionCourante = null;
     document.getElementById("scan-info-bloc").style.display = "none";
@@ -560,15 +659,31 @@ function rechercherAccession() {
     }
   }
 }
- 
+
+// ── Écrit des lignes Suivi2 ET les ajoute aussitôt à cacheSuivi ──
+// Sans cela, le cache n'était relu qu'au démarrage de la session : deux multiplications sur le même
+// tube (ou deux croissances sur la même accession) dans la même session repartaient de A-01 / A.
+async function ecrireSuivi(actions) {
+  const result = await grist.docApi.applyUserActions(actions);
+  actions.forEach((act, i) => {
+    const f = act[3] || {};
+    cacheSuivi.push({
+      id: result.retValues[i], codeIntroId: f.CodeIntro, etapeId: f.Etape, codePartenaire: f.CodePartenaire || null,
+      reussite: f.Reussite || null, date: f.Date, codeMicrogreffe: f.CodeMicrogreffe || null
+    });
+  });
+  return result;
+}
+
 function annulerScan() {
   accessionCourante = null;
   document.getElementById("scan-code").value = "";
   document.getElementById("scan-info-bloc").style.display = "none";
+  masquerChoixSouche();
   masquerAlerte("alerte-scan");
   document.getElementById("scan-code").focus();
 }
- 
+
 // ════════════════════════════════════════════════
 //  IMPORT CSV — alternative au scan répété (session sans accès terrain au formulaire)
 //  Réutilise les mêmes fonctions de validation que le scan manuel (trouverAccession,
@@ -601,37 +716,51 @@ function parserCSV(texte) {
   const donnees = lignes.slice(1).map(parserLigne);
   return { entetes, donnees };
 }
- 
+
 function indexColonne(entetes, nom) { return entetes.findIndex(h => h.toLowerCase() === nom.toLowerCase()); }
- 
+
 // ── Traite une ligne d'import : mêmes vérifications et mêmes écritures Grist qu'un scan manuel ──
 async function traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, commentaireBrut, etapeCode) {
-  const partiesMG = codeBrut.match(/^(.+)-(M\d+)$/);
+  const partiesMG = analyserCodeTube(codeBrut);
   let acc, accId, codeAffiche = codeBrut, codeMicrogreffeParent = null;
- 
+
   if (ETAPES_COMPOSITE_M.includes(etapeCode)) {
-    if (!partiesMG) return { ok: false, message: "Code composite attendu (ex : CODE-M01) pour cette étape." };
+    if (!partiesMG) return { ok: false, message: "Code composite attendu (ex : CODE-A) pour cette étape." };
     const codeAcc = partiesMG[1], numMG = partiesMG[2];
-    const rechercheAcc = trouverAccession(codeAcc);
+    // Le tube appartient à UNE souche précise (attribuée à la Croissance en tube) : pas besoin de
+    // suffixe -S ici même si plusieurs souches existent pour ce CodeIntro, trouverAccessionParTube()
+    // retrouve directement la bonne ligne.
+    const rechercheAcc = trouverAccessionParTube(codeAcc, numMG);
     if (rechercheAcc.statut === "introuvable") return { ok: false, message: `Accession "${codeAcc}" introuvable.` };
     if (rechercheAcc.statut === "mauvaise_campagne") return { ok: false, message: `Code existe mais pas pour la campagne ${session.campagne}.` };
+    if (rechercheAcc.statut === "tube_introuvable") return { ok: false, message: `Code "${numMG}" introuvable pour cette accession (étape Croissance en tube).` };
     acc = rechercheAcc.acc; accId = acc.id; codeAffiche = codeAcc;
-    const mgExiste = cacheSuivi.some(r => r.codeIntroId === acc.id && codeEtapeParId(r.etapeId) === ETAPE_CROISSANCE_TUBE && r.codeMicrogreffe === numMG);
-    if (!mgExiste) return { ok: false, message: `Code "${numMG}" introuvable pour cette accession (étape Croissance en tube).` };
     codeMicrogreffeParent = numMG;
     const conflit = verifierContinuitePartenaire(acc.id, etapeCode);
     if (conflit) return { ok: false, message: conflit };
   } else {
     if (partiesMG) return { ok: false, message: "Code composite non attendu pour cette étape." };
-    const rechercheAcc = trouverAccession(codeBrut);
-    if (rechercheAcc.statut === "introuvable") return { ok: false, message: `Accession "${codeBrut}" introuvable.` };
+    // Suffixe -S optionnel (ex : CODE-S2) pour préciser la souche quand plusieurs existent pour ce
+    // CodeIntro/cette campagne — pas d'écran interactif possible en import, donc obligatoire si ambigu.
+    const partiesSouche = codeBrut.match(/^(.+)-S(\w+)$/i);
+    const codeBase = partiesSouche ? partiesSouche[1] : codeBrut;
+    const soucheDemandee = partiesSouche ? ("S" + partiesSouche[2]).toUpperCase() : null;
+    const rechercheAcc = trouverAccession(codeBase);
+    if (rechercheAcc.statut === "introuvable") return { ok: false, message: `Accession "${codeBase}" introuvable.` };
     if (rechercheAcc.statut === "mauvaise_campagne") return { ok: false, message: `Code existe mais pas pour la campagne ${session.campagne}.` };
-    acc = rechercheAcc.acc; accId = acc.id;
+    if (rechercheAcc.statut === "ambigu") {
+      if (!soucheDemandee) return { ok: false, message: `Plusieurs souches existent pour "${codeBase}" — préciser avec un suffixe, ex. ${codeBase}-S2.` };
+      acc = rechercheAcc.candidats.find(c => (c.souche || "").toUpperCase() === soucheDemandee);
+      if (!acc) return { ok: false, message: `Souche "${soucheDemandee}" introuvable pour "${codeBase}".` };
+    } else {
+      acc = rechercheAcc.acc;
+    }
+    accId = acc.id; codeAffiche = codeBase + (soucheDemandee ? "-" + soucheDemandee : "");
     if (dejaScanneeDansSession(acc.id, etapeCode)) return { ok: false, message: "Déjà enregistrée à cette étape (session ou import en cours)." };
     const conflit = verifierContinuitePartenaire(acc.id, etapeCode);
     if (conflit) return { ok: false, message: conflit };
   }
- 
+
   let nbApex = null;
   if (ETAPES_NB_APEX_SIMPLE.includes(etapeCode)) {
     nbApex = parseInt(nbApexBrut);
@@ -647,7 +776,7 @@ async function traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, co
     nbBoutures = parseInt(nombreBrut);
     if (!nbBoutures || nbBoutures < 1) return { ok: false, message: "Colonne Nombre obligatoire (≥ 1) pour cette étape." };
   }
- 
+
   const fieldsBase = {
     CodeIntro: accId, Methode: session.methode, Etape: session.etape,
     Date: Math.floor(new Date(session.date).getTime() / 1000), Operateur: session.operateur,
@@ -657,9 +786,9 @@ async function traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, co
   if (commentaireBrut) fieldsBase.Commentaires = commentaireBrut;
   if (ETAPES_NB_APEX_SIMPLE.includes(etapeCode)) fieldsBase.NbApex = nbApex;
   if (codeMicrogreffeParent && etapeCode !== ETAPE_MULT_PLANTES) fieldsBase.CodeMicrogreffe = codeMicrogreffeParent;
- 
+
   const estEchec = reussite === "Échec" || reussite === "Non conforme";
- 
+
   // ── Avertissements non bloquants (même logique que le scan manuel) ──
   let avertissement = null;
   if (ETAPES_COMPOSITE_M.includes(etapeCode)) {
@@ -670,24 +799,20 @@ async function traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, co
     const av = [alerteEtapeDejaFaite(accId, etapeCode), alerteEchecAnterieur(accId)];
     avertissement = av.filter(Boolean).join(" · ") || null;
   }
- 
+
   try {
     if (etapeCode === ETAPE_CROISSANCE_TUBE) {
       const actions = [];
-      for (let n = 1; n <= nbLignes; n++) actions.push(["AddRecord", "Suivi2", null, { ...fieldsBase, CodeMicrogreffe: `M${String(n).padStart(2, "0")}` }]);
-      const result = await grist.docApi.applyUserActions(actions);
+      prochainsCodesTubes(accId, nbLignes).forEach(c => actions.push(["AddRecord", "Suivi2", null, { ...fieldsBase, CodeMicrogreffe: c }]));
+      const result = await ecrireSuivi(actions);
       scansSession.push({ code: codeAffiche, nom: acc.nomIntro, ok: true, echec: estEchec, gristIds: result.retValues, accId, etapeCode, nbLignes });
     } else if (etapeCode === ETAPE_MULT_PLANTES) {
-      const bExistantes = cacheSuivi.filter(r =>
-        r.codeIntroId === accId && codeEtapeParId(r.etapeId) === ETAPE_MULT_PLANTES &&
-        r.codeMicrogreffe?.startsWith(codeMicrogreffeParent + "-MB")
-      ).length;
       const actions = [];
-      for (let n = 1; n <= nbBoutures; n++) actions.push(["AddRecord", "Suivi2", null, { ...fieldsBase, CodeMicrogreffe: `${codeMicrogreffeParent}-MB${String(bExistantes + n).padStart(2, "0")}` }]);
-      const result = await grist.docApi.applyUserActions(actions);
+      prochainsCodesBoutures(accId, codeMicrogreffeParent, nbBoutures).forEach(c => actions.push(["AddRecord", "Suivi2", null, { ...fieldsBase, CodeMicrogreffe: c }]));
+      const result = await ecrireSuivi(actions);
       scansSession.push({ code: codeAffiche, nom: `${acc.nomIntro} — ${codeMicrogreffeParent}`, ok: true, echec: estEchec, gristIds: result.retValues, accId, etapeCode, nbBoutures });
     } else {
-      const result = await grist.docApi.applyUserActions([["AddRecord", "Suivi2", null, fieldsBase]]);
+      const result = await ecrireSuivi([["AddRecord", "Suivi2", null, fieldsBase]]);
       scansSession.push({ code: codeAffiche, nom: acc.nomIntro, ok: true, echec: estEchec, gristId: result.retValues[0], accId, etapeCode });
     }
     return { ok: true, message: "Importé", avertissement };
@@ -695,7 +820,7 @@ async function traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, co
     return { ok: false, message: "Erreur Grist : " + e.message };
   }
 }
- 
+
 async function importerCSV() {
   const fichierInput = document.getElementById("import-fichier");
   const fichier = fichierInput.files[0];
@@ -703,7 +828,7 @@ async function importerCSV() {
   if (!session.etape) return afficherAlerte("alerte-scan", "Session non démarrée.", "erreur");
   masquerAlerte("alerte-scan");
   document.getElementById("resultat-import").innerHTML = "";
- 
+
   const texte = await fichier.text();
   const { entetes, donnees } = parserCSV(texte);
   const idxCode = indexColonne(entetes, "CodeIntro");
@@ -713,13 +838,13 @@ async function importerCSV() {
   const idxCommentaire = indexColonne(entetes, "Commentaires");
   if (idxCode === -1) return afficherAlerte("alerte-scan", 'Colonne "CodeIntro" introuvable dans le fichier.', "erreur");
   if (donnees.length === 0) return afficherAlerte("alerte-scan", "Fichier vide (aucune ligne de données).", "erreur");
- 
+
   const etapeCode = codeEtapeParId(session.etape);
   const resultats = [];
   const btnImport = document.getElementById("btn-import");
   btnImport.disabled = true;
   btnImport.innerHTML = 'Import en cours <span class="spinner"></span>';
- 
+
   for (let i = 0; i < donnees.length; i++) {
     const l = donnees[i];
     const numLigne = i + 2;
@@ -729,24 +854,24 @@ async function importerCSV() {
     const reussiteBrut = idxReussite !== -1 ? (l[idxReussite] || "").trim() : "";
     const nbApexBrut = idxNbApex !== -1 ? (l[idxNbApex] || "").trim() : "";
     const commentaireBrut = idxCommentaire !== -1 ? (l[idxCommentaire] || "").trim() : "";
- 
+
     let reussite = null;
     if (/^échec$|^echec$/i.test(reussiteBrut)) reussite = "Échec";
     else if (/^non ?conforme$/i.test(reussiteBrut)) reussite = "Non conforme";
     else if (/^conforme$/i.test(reussiteBrut)) reussite = "Conforme";
     else if (reussiteBrut) { resultats.push({ ligne: numLigne, code: codeBrut, ok: false, message: `Valeur Reussite non reconnue : "${reussiteBrut}"` }); continue; }
- 
+
     const res = await traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, commentaireBrut, etapeCode);
     resultats.push({ ligne: numLigne, code: codeBrut, ok: res.ok, message: res.message, avertissement: res.avertissement });
   }
- 
+
   btnImport.disabled = false;
   btnImport.textContent = "Importer";
   mettreAJourCompteur();
   afficherResultatImport(resultats);
   fichierInput.value = "";
 }
- 
+
 function afficherResultatImport(resultats) {
   const nbOk = resultats.filter(r => r.ok).length;
   const nbErr = resultats.filter(r => !r.ok).length;
@@ -760,7 +885,7 @@ function afficherResultatImport(resultats) {
   }
   document.getElementById("resultat-import").innerHTML = html;
 }
- 
+
 async function enregistrerScan(reussite) {
   if (!accessionCourante || enRegistrement) return;
   const etapeCode = codeEtapeParId(session.etape);
@@ -776,12 +901,12 @@ async function enregistrerScan(reussite) {
   }
   let nbBoutures = null;
   if (etapeCode === ETAPE_MULT_PLANTES) {
-    if (!accessionCourante.codeMicrogreffeParent) return afficherAlerte("alerte-scan", "Scanner d'abord un code de tube valide (ex : CODE-M01).", "erreur");
+    if (!accessionCourante.codeMicrogreffeParent) return afficherAlerte("alerte-scan", "Scanner d'abord un code de tube valide (ex : CODE-A).", "erreur");
     nbBoutures = parseInt(document.getElementById("scan-nbBoutures").value);
     if (!nbBoutures || nbBoutures < 1) return afficherAlerte("alerte-scan", "Nombre de boutures obligatoire (au moins 1).", "erreur");
   }
   if (etapeCode === ETAPE_CONTROLE && !accessionCourante.codeMicrogreffeParent) {
-    return afficherAlerte("alerte-scan", "Scanner d'abord un code de tube valide (ex : CODE-M01).", "erreur");
+    return afficherAlerte("alerte-scan", "Scanner d'abord un code de tube valide (ex : CODE-A).", "erreur");
   }
   enRegistrement = true;
   const bc = document.getElementById("btn-confirmer"), be = document.getElementById("btn-echec");
@@ -804,34 +929,24 @@ async function enregistrerScan(reussite) {
   const estEchec = reussite === "Échec" || reussite === "Non conforme";
   try {
     if (etapeCode === ETAPE_CROISSANCE_TUBE) {
-      // Génère automatiquement une ligne Suivi2 par apex, numérotée CODE-M01, CODE-M02, …
+      // Génère automatiquement une ligne Suivi2 par apex, codée par lettres : CODE-A, CODE-B, …
       // (même colonne CodeMicrogreffe que les microgreffes IFV), en un seul lot d'actions.
       const actions = [];
-      for (let n = 1; n <= nbLignes; n++) {
-        const suffixe = String(n).padStart(2, "0");
-        actions.push(["AddRecord", "Suivi2", null, { ...fieldsBase, CodeMicrogreffe: `M${suffixe}` }]);
-      }
-      const result = await grist.docApi.applyUserActions(actions);
+      prochainsCodesTubes(accessionCourante.id, nbLignes).forEach(c => actions.push(["AddRecord", "Suivi2", null, { ...fieldsBase, CodeMicrogreffe: c }]));
+      const result = await ecrireSuivi(actions);
       const gristIds = result.retValues;
       scansSession.push({ code: accessionCourante.code, nom: accessionCourante.nomIntro, ok: true, echec: estEchec, gristIds, accId: accessionCourante.id, etapeCode, nbLignes });
     } else if (etapeCode === ETAPE_MULT_PLANTES) {
       // Génère automatiquement une ligne Suivi2 par bouture, à partir du tube M0x scanné,
-      // numérotée M0x-MB01, M0x-MB02, … (reprend la numérotation déjà présente le cas échéant).
+      // numérotée A-01, A-02, … (reprend la numérotation déjà présente le cas échéant).
       const mgParent = accessionCourante.codeMicrogreffeParent;
-      const bExistantes = cacheSuivi.filter(r =>
-        r.codeIntroId === accessionCourante.id &&
-        codeEtapeParId(r.etapeId) === ETAPE_MULT_PLANTES &&
-        r.codeMicrogreffe?.startsWith(mgParent + "-MB")
-      ).length;
       const actions = [];
-      for (let n = 1; n <= nbBoutures; n++) {
-        actions.push(["AddRecord", "Suivi2", null, { ...fieldsBase, CodeMicrogreffe: `${mgParent}-MB${String(bExistantes + n).padStart(2, "0")}` }]);
-      }
-      const result = await grist.docApi.applyUserActions(actions);
+      prochainsCodesBoutures(accessionCourante.id, mgParent, nbBoutures).forEach(c => actions.push(["AddRecord", "Suivi2", null, { ...fieldsBase, CodeMicrogreffe: c }]));
+      const result = await ecrireSuivi(actions);
       const gristIds = result.retValues;
       scansSession.push({ code: accessionCourante.code, nom: `${accessionCourante.nomIntro} — ${mgParent}`, ok: true, echec: estEchec, gristIds, accId: accessionCourante.id, etapeCode, nbBoutures });
     } else {
-      const result = await grist.docApi.applyUserActions([["AddRecord", "Suivi2", null, fieldsBase]]);
+      const result = await ecrireSuivi([["AddRecord", "Suivi2", null, fieldsBase]]);
       const gristId = result.retValues[0];
       scansSession.push({ code: accessionCourante.code, nom: accessionCourante.nomIntro, ok: true, echec: estEchec, gristId, accId: accessionCourante.id, etapeCode });
     }
@@ -843,7 +958,7 @@ async function enregistrerScan(reussite) {
   enRegistrement = false; bc.disabled = be.disabled = false;
   bc.textContent = "Confirmer ✓"; be.textContent = "Déclarer échec ✗";
 }
- 
+
 function mettreAJourCompteur() {
   const nb = scansSession.filter(s => s.ok).length;
   const nbEchec = scansSession.filter(s => s.echec).length;
@@ -857,7 +972,7 @@ function mettreAJourCompteur() {
   }).reverse().join("");
   document.getElementById("section-historique").style.display = "block";
 }
- 
+
 async function annulerDernierScan(index) {
   const scan = scansSession[index];
   if (!scan) return;
@@ -868,31 +983,33 @@ async function annulerDernierScan(index) {
     } else if (scan.gristId) {
       await grist.docApi.applyUserActions([["RemoveRecord", "Suivi2", scan.gristId]]);
     } else return;
+    const idsRetires = scan.gristIds && scan.gristIds.length ? scan.gristIds : [scan.gristId];
+    cacheSuivi = cacheSuivi.filter(r => !idsRetires.includes(r.id));
     scansSession.splice(index, 1); mettreAJourCompteur();
   } catch(e) { afficherAlerte("alerte-scan", "Impossible d'annuler : " + e.message, "erreur"); }
 }
- 
+
 function flashEcran(couleur) { const el = document.getElementById("flash"); el.className = "flash-overlay " + couleur + " actif"; setTimeout(() => el.classList.remove("actif"), 350); }
- 
+
 function terminerSession() {
   const nb = scansSession.filter(s=>s.ok).length, nbEchec = scansSession.filter(s=>s.echec).length, nbErr = scansSession.filter(s=>!s.ok).length;
   document.getElementById("fin-resume").innerHTML = `<strong>Partenaire :</strong> ${PARTENAIRE_CONFIG.nom}<br><strong>Campagne :</strong> ${session.campagne}<br><strong>Étape :</strong> ${session.etapeNom}<br><strong>Méthode :</strong> ${session.methode}<br><strong>Date :</strong> ${session.date}<br><strong>Opérateur :</strong> ${session.operateurNom}<br><strong>Emplacement :</strong> ${session.emplacement}<br><strong>Scans enregistrés :</strong> ${nb}<br>${nbEchec>0?`<strong style="color:#e65100">Échecs :</strong> ${nbEchec}<br>`:""}${nbErr>0?`<strong style="color:var(--erreur)">Erreurs :</strong> ${nbErr}`:""}`;
   afficherEcran("ecran-fin");
 }
- 
+
 function nouvelleSession() {
   session={}; scansSession=[]; accessionCourante=null; enRegistrement=false;
   document.getElementById("scan-code").value="";
   document.getElementById("scan-info-bloc").style.display="none";
+  masquerChoixSouche();
   document.getElementById("section-historique").style.display="none";
   document.getElementById("cfg-date").value=new Date().toISOString().split("T")[0];
   afficherEcran("ecran-config");
 }
- 
+
 function afficherEcran(id) { document.querySelectorAll(".ecran").forEach(e=>e.classList.remove("actif")); document.getElementById(id).classList.add("actif"); window.scrollTo(0,0); }
 function afficherAlerte(id, msg, type) { const el=document.getElementById(id); el.textContent=msg; el.className="alerte "+type; }
 function masquerAlerte(id) { const el=document.getElementById(id); el.className="alerte"; el.textContent=""; }
 </script>
 </body>
 </html>
- 
