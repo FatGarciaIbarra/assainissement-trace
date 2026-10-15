@@ -139,10 +139,6 @@ textarea { resize: vertical; min-height: 60px; }
       <div class="section-titre">Scanner une accession</div>
       <div class="section-corps">
         <div class="champ"><label>Code intro</label><input type="text" id="scan-code" class="scan-input" placeholder="Scanner…" autocomplete="off"></div>
-        <div id="choix-souche-bloc" style="display:none;margin-bottom:10px">
-          <div class="info-label" style="margin-bottom:6px">Plusieurs souches existent pour ce code — laquelle ?</div>
-          <div class="btns" id="choix-souche-boutons"></div>
-        </div>
         <div id="scan-info-bloc" style="display:none">
           <div class="info-accession">
             <div class="info-item"><div class="info-label">Nom intro</div><div class="info-valeur" id="scan-nomIntro">—</div></div>
@@ -152,6 +148,8 @@ textarea { resize: vertical; min-height: 60px; }
             <div class="champs-acc-titre">Données complémentaires</div>
             <div class="champ" id="champ-nbApex" style="display:none"><label>Nombre d'apex traités <span class="requis">*</span></label><input type="number" id="scan-nbApex" min="0" placeholder="Ex : 20"></div>
             <div class="champ" id="champ-nbApexLignes" style="display:none"><label>Nombre d'apex <span class="requis">*</span></label><input type="number" id="scan-nbApexLignes" min="1" placeholder="Ex : 12"></div>
+            <div class="champ" id="champ-souches-debourrement" style="display:none"><label>Souches utilisées <span class="requis">*</span></label><div id="souches-cases" style="display:flex;flex-wrap:wrap;gap:6px 14px"></div></div>
+            <div class="champ" id="champ-souche-etape" style="display:none"><label>Souche concernée <span class="requis">*</span></label><select id="scan-souche"><option value="">— Choisir —</option></select></div>
             <div class="champ" id="champ-nbBoutures" style="display:none"><label>Nombre de boutures <span class="requis">*</span></label><input type="number" id="scan-nbBoutures" min="1" placeholder="Ex : 5"></div>
             <div class="champ"><label>Commentaire</label><textarea id="scan-commentaire" placeholder="Observation…"></textarea></div>
           </div>
@@ -168,7 +166,7 @@ textarea { resize: vertical; min-height: 60px; }
       <div class="section-corps">
         <div class="champ"><label>Fichier</label><input type="file" id="import-fichier" accept=".csv"></div>
         <div style="font-size:11px;color:var(--texte-2);margin-bottom:10px;line-height:1.6">
-          Colonnes : <strong>CodeIntro</strong> (obligatoire, ou <code>CodeIntro-A</code> (code du tube) pour Multiplication/Contrôle — les anciens codes <code>CodeIntro-M01</code> restent reconnus ; ajouter <code>-S2</code> avant l'étape si plusieurs souches existent pour ce code, ex. <code>CodeIntro-S2</code>, seulement pour les étapes hors Multiplication/Contrôle), <strong>Nombre</strong> (Croissance en tube / Multiplication uniquement), <strong>Reussite</strong> (vide = confirmé/conforme, sinon <code>Echec</code>, <code>NonConforme</code> ou <code>Conforme</code>), <strong>NbApex</strong> (Cryothérapie / Régénération méristèmes uniquement), <strong>Commentaires</strong>.
+          Colonnes : <strong>CodeIntro</strong> (obligatoire, ou <code>CodeIntro-A</code> (code du tube) pour Multiplication/Contrôle — les anciens codes <code>CodeIntro-M01</code> restent reconnus , <strong>Nombre</strong> (Croissance en tube / Multiplication uniquement), <strong>Reussite</strong> (vide = confirmé/conforme, sinon <code>Echec</code>, <code>NonConforme</code> ou <code>Conforme</code>), <strong>NbApex</strong> (Cryothérapie / Régénération méristèmes uniquement), <strong>Souche</strong> (Débourrement : souches utilisées, S1 à S10, séparées par <code>+</code> ex. <code>S1+S3</code> ; autres étapes : une seule souche, uniquement si plusieurs souches ont été utilisées au débourrement), <strong>Commentaires</strong>.
         </div>
         <div class="btns"><button class="btn btn-principal" id="btn-import" onclick="importerCSV()">Importer</button></div>
         <div id="resultat-import"></div>
@@ -251,6 +249,56 @@ function prochainsCodesTubes(accId, nb) {
   const depart = existants.length ? Math.max(...existants) : 0;
   return Array.from({ length: nb }, (_, i) => lettreDepuisIndex(depart + i + 1));
 }
+// ── Souches (S1 à S10) ──
+// Toute l'accession est réceptionnée en une seule ligne Accessions. Au DÉBOURREMENT (bouturage), on indique
+// quelles souches ont été utilisées (une ou plusieurs, enregistrées dans Suivi2.Souche, ex. "S1,S3").
+// Si au moins deux souches ont été utilisées, chaque étape suivante demande de quelle souche il s'agit
+// (liste limitée aux souches utilisées). Les étapes par tube (Multiplication, Contrôle) reprennent la souche
+// du tube, fixée à la Croissance en tube.
+const ETAPE_DEBOURREMENT = "DEBOURREMENT";
+const SOUCHES_DISPONIBLES = Array.from({ length: 10 }, (_, i) => "S" + (i + 1));
+function parserSouches(txt) {
+  const l = String(txt || "").toUpperCase().split(/[,;+\/\s]+/).filter(Boolean);
+  return [...new Set(l)];
+}
+function souchesValides(liste) { return liste.every(x => SOUCHES_DISPONIBLES.includes(x)); }
+function soucheUtilisees(accId) {
+  const set = new Set();
+  cacheSuivi.filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) === ETAPE_DEBOURREMENT)
+    .forEach(r => parserSouches(r.souche).forEach(x => set.add(x)));
+  return SOUCHES_DISPONIBLES.filter(x => set.has(x));
+}
+// Souche d'un tube : celle choisie lors de la Croissance en tube (tube ou bouture "A-01" → tube "A").
+function soucheDuTube(accId, tube) {
+  const tubeRacine = String(tube || "").split("-")[0];
+  const ligne = cacheSuivi.find(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) === ETAPE_CROISSANCE_TUBE && r.codeMicrogreffe === tubeRacine && r.souche);
+  return ligne ? ligne.souche : null;
+}
+// Faut-il demander la souche à cette étape ? Retourne la liste des souches proposables, ou null.
+function souchesAProposer(accId, etapeCode) {
+  if (etapeCode === "RECEPTION" || etapeCode === ETAPE_DEBOURREMENT || ETAPES_COMPOSITE_M.includes(etapeCode)) return null;
+  const u = soucheUtilisees(accId);
+  return u.length >= 2 ? u : null;
+}
+// Affiche/masque les champs souche selon l'étape et l'accession.
+function preparerChampsSouche(accId, etapeCode) {
+  const blocDeb = document.getElementById("champ-souches-debourrement");
+  const blocEtape = document.getElementById("champ-souche-etape");
+  blocDeb.style.display = "none"; blocEtape.style.display = "none";
+  if (etapeCode === ETAPE_DEBOURREMENT) {
+    const dejaUtilisees = soucheUtilisees(accId);
+    document.getElementById("souches-cases").innerHTML = SOUCHES_DISPONIBLES.map(x =>
+      `<label style="display:inline-flex;align-items:center;gap:4px;font-size:12px"><input type="checkbox" value="${x}" ${dejaUtilisees.includes(x) ? "checked" : ""}> ${x}</label>`).join("");
+    blocDeb.style.display = "";
+    return;
+  }
+  const propos = souchesAProposer(accId, etapeCode);
+  if (propos) {
+    document.getElementById("scan-souche").innerHTML = '<option value="">— Choisir —</option>' + propos.map(x => `<option value="${x}">${x}</option>`).join("");
+    blocEtape.style.display = "";
+  }
+}
+
 // Codes de boutures (numéros) à créer sous un tube : continue après les boutures déjà présentes (anciennes -MB01 comprises).
 function prochainsCodesBoutures(accId, tube, nb) {
   const deja = cacheSuivi.filter(r =>
@@ -311,7 +359,7 @@ async function chargerDonnees() {
       const c = accs.CodeIntro[i];
       if (!c) return;
       const code = c.toUpperCase();
-      const entree = { id, nomIntro: accs.NomIntro[i] || "—", nomVar: accs.NomVar[i] || "—", campagne: accs.Campagne[i] || null, souche: accs.Souche ? (accs.Souche[i] || null) : null };
+      const entree = { id, nomIntro: accs.NomIntro[i] || "—", nomVar: accs.NomVar[i] || "—", campagne: accs.Campagne[i] || null };
       if (!cacheAccessions[code]) cacheAccessions[code] = [];
       cacheAccessions[code].push(entree);
     });
@@ -323,6 +371,7 @@ async function chargerDonnees() {
       etapeId:         suivi.Etape[i],
       codePartenaire:  suivi.CodePartenaire[i],
       reussite:        suivi.Reussite[i],
+      souche:          suivi.Souche ? suivi.Souche[i] : null,
       date:            suivi.Date[i],
       codeMicrogreffe: suivi.CodeMicrogreffe ? suivi.CodeMicrogreffe[i] : null
     }));
@@ -341,17 +390,15 @@ function codeEtapeParId(id) { const e = cacheEtapes.find(e => e.id === id); retu
 function nomEtapeParId(id)  { const e = cacheEtapes.find(e => e.id === id); return e ? e.nom : null; }
 
 // ── Résolution d'une accession en tenant compte de la campagne de session ──
-// Un même CodeIntro peut exister pour plusieurs campagnes (reprise après échec), et pour
-// une même campagne s'il y a plusieurs souches prélevées (colonne Souche, S1/S2/… — cas rare,
-// seulement quand le matériel d'une souche seule ne suffit pas) : on désambiguïse d'abord par
-// la campagne choisie en session, puis par la souche si plusieurs lignes restent (statut "ambigu",
-// à trancher par l'opérateur via un choix explicite — voir demanderChoixSouche()).
+// Un même CodeIntro peut exister pour plusieurs campagnes (reprise après échec) ; pour une campagne
+// donnée il ne doit y en avoir qu'une ligne (les souches se gèrent dans Suivi2.Souche, pas dans Accessions).
+// Plusieurs lignes pour le même code et la même campagne = erreur de saisie dans Grist (statut "doublon").
 function trouverAccession(code) {
   const candidats = cacheAccessions[code];
   if (!candidats || candidats.length === 0) return { statut: "introuvable" };
   const matches = candidats.filter(a => a.campagne === session.campagne);
   if (matches.length === 0) return { statut: "mauvaise_campagne" };
-  if (matches.length > 1) return { statut: "ambigu", candidats: matches };
+  if (matches.length > 1) return { statut: "doublon" };
   return { statut: "ok", acc: matches[0] };
 }
 
@@ -427,7 +474,26 @@ function dejaScanneeDansSession(accId, etapeCode) {
 // ── Avertit (non bloquant) si cette étape a déjà été enregistrée pour cette accession ──
 // (même campagne, toute date confondue) — même logique que le cycle libre d'IFV
 // (Conteneur/Tablard/Thermothérapie) : ne bloque pas, juste un rappel de la dernière étape faite.
+// ── Rempotage : répétable à volonté, mais obligatoire au moins une fois avant le caisson chaud ──
+// Détection par code OU nom d'étape (le code Ref_Etapes du rempotage est libre) ; le caisson chaud est B_CAISSON_CHAUD.
+function normTexte(t) { return (t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(); }
+function etapeEstRempotage(etapeId) {
+  return normTexte(codeEtapeParId(etapeId)).includes("rempot") || normTexte(nomEtapeParId(etapeId)).includes("rempot");
+}
+function etapeCodeEstRempotage(etapeCode) {
+  const e = cacheEtapes.find(x => x.code === etapeCode);
+  return !!e && etapeEstRempotage(e.id);
+}
+const ETAPE_CAISSON_CHAUD = "B_CAISSON_CHAUD";
+// Message bloquant si on tente le caisson chaud sans qu'aucun rempotage n'ait été enregistré pour l'accession.
+function blocageRempotageObligatoire(accId, etapeCode) {
+  if (etapeCode !== ETAPE_CAISSON_CHAUD) return null;
+  const aRempote = cacheSuivi.some(r => r.codeIntroId === accId && etapeEstRempotage(r.etapeId));
+  return aRempote ? null : "Rempotage obligatoire avant le caisson chaud : aucun rempotage enregistré pour cette accession.";
+}
+
 function alerteEtapeDejaFaite(accId, etapeCode) {
+  if (etapeCodeEstRempotage(etapeCode)) return null; // le rempotage peut être répété : pas d'avertissement
   const historique = cacheSuivi.filter(r => r.codeIntroId === accId);
   const dejaFaite = historique.some(r => codeEtapeParId(r.etapeId) === etapeCode);
   if (!dejaFaite) return null;
@@ -504,6 +570,7 @@ async function demarrerSession() {
     cacheSuivi = suivi.id.map((id, i) => ({
       id, codeIntroId: suivi.CodeIntro[i], etapeId: suivi.Etape[i],
       codePartenaire: suivi.CodePartenaire[i], reussite: suivi.Reussite[i], date: suivi.Date[i],
+      souche: suivi.Souche ? suivi.Souche[i] : null,
       codeMicrogreffe: suivi.CodeMicrogreffe ? suivi.CodeMicrogreffe[i] : null
     }));
   } catch(e) { console.warn("Impossible de recharger Suivi2 :", e); }
@@ -513,34 +580,6 @@ async function demarrerSession() {
   ni.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); rechercherAccession(); } });
   ni.addEventListener("input", debounce(e => { if (e.target.value.trim().length > 2) rechercherAccession(); }, 350));
   setTimeout(() => ni.focus(), 100);
-}
-
-// ── Choix de souche (cas ambigu : plusieurs lignes Accessions pour le même CodeIntro/campagne) ──
-let choixSoucheCallback = null;
-let choixSoucheCandidats = [];
-
-function demanderChoixSouche(candidats, callback) {
-  masquerChoixSouche();
-  document.getElementById("scan-info-bloc").style.display = "none";
-  choixSoucheCallback = callback;
-  choixSoucheCandidats = [...candidats].sort((a,b) => (a.souche || "").localeCompare(b.souche || ""));
-  document.getElementById("choix-souche-boutons").innerHTML = choixSoucheCandidats
-    .map((c, i) => `<button class="btn btn-secondaire" onclick="choisirSouche(${i})">${c.souche || "(non précisée)"}</button>`).join("");
-  document.getElementById("choix-souche-bloc").style.display = "block";
-}
-
-function choisirSouche(index) {
-  const acc = choixSoucheCandidats[index];
-  const cb = choixSoucheCallback;
-  masquerChoixSouche();
-  if (cb) cb(acc);
-}
-
-function masquerChoixSouche() {
-  document.getElementById("choix-souche-bloc").style.display = "none";
-  document.getElementById("choix-souche-boutons").innerHTML = "";
-  choixSoucheCallback = null;
-  choixSoucheCandidats = [];
 }
 
 // ── Poursuite du scan une fois l'accession/souche résolue (code composite CODE-A) ──
@@ -558,8 +597,9 @@ function continuerCompositeAvecAccession(acc, codeAcc, numMG, etapeCode) {
   document.getElementById("champ-nbBoutures").style.display = (etapeCode === ETAPE_MULT_PLANTES) ? "" : "none";
   document.getElementById("scan-nbBoutures").value = "";
   const titreBloc = document.querySelector("#champs-communs .champs-acc-titre");
-  if (titreBloc) titreBloc.textContent = (etapeCode === ETAPE_CONTROLE ? "Contrôle — " : "Multiplication — ") + numMG + (acc.souche ? ` (${acc.souche})` : "");
+  if (titreBloc) titreBloc.textContent = (etapeCode === ETAPE_CONTROLE ? "Contrôle — " : "Multiplication — ") + numMG;
   configurerBoutons(etapeCode);
+  preparerChampsSouche(acc.id, etapeCode);
   const alertesInfo = [alerteEchecAnterieur(acc.id)];
   if (etapeCode === ETAPE_CONTROLE) alertesInfo.push(alerteControleAnterieur(acc.id, numMG));
   const alertesFiltrees = alertesInfo.filter(Boolean);
@@ -592,6 +632,14 @@ function continuerSimpleAvecAccession(acc, code, etapeCode) {
     return;
   }
 
+  const msgRempotage = blocageRempotageObligatoire(acc.id, etapeCode);
+  if (msgRempotage) {
+    accessionCourante = null;
+    document.getElementById("scan-info-bloc").style.display = "none";
+    afficherAlerte("alerte-scan", msgRempotage, "erreur"); flashEcran("rouge");
+    return;
+  }
+
   accessionCourante = { code, ...acc };
   document.getElementById("scan-nomIntro").textContent = acc.nomIntro;
   document.getElementById("scan-nomVar").textContent = acc.nomVar;
@@ -603,8 +651,9 @@ function continuerSimpleAvecAccession(acc, code, etapeCode) {
   document.getElementById("scan-nbApexLignes").value = "";
   document.getElementById("champ-nbBoutures").style.display = "none";
   const titreBloc = document.querySelector("#champs-communs .champs-acc-titre");
-  if (titreBloc) titreBloc.textContent = "Données complémentaires" + (acc.souche ? ` — ${acc.souche}` : "");
+  if (titreBloc) titreBloc.textContent = "Données complémentaires";
   configurerBoutons(etapeCode);
+  preparerChampsSouche(acc.id, etapeCode);
   const alertesInfo = [alerteEtapeDejaFaite(acc.id, etapeCode), alerteEchecAnterieur(acc.id)].filter(Boolean);
   if (alertesInfo.length) afficherAlerte("alerte-scan", alertesInfo.join(" · "), "info");
   setTimeout(() => document.getElementById("btn-confirmer").focus(), 50);
@@ -613,7 +662,6 @@ function continuerSimpleAvecAccession(acc, code, etapeCode) {
 function rechercherAccession() {
   const input = document.getElementById("scan-code").value.trim().toUpperCase();
   masquerAlerte("alerte-scan");
-  masquerChoixSouche();
   if (!input) return;
   const etapeCode = codeEtapeParId(session.etape);
 
@@ -646,15 +694,15 @@ function rechercherAccession() {
   const rechercheAcc = trouverAccession(code);
   if (rechercheAcc.statut === "ok") {
     continuerSimpleAvecAccession(rechercheAcc.acc, code, etapeCode);
-  } else if (rechercheAcc.statut === "ambigu") {
-    demanderChoixSouche(rechercheAcc.candidats, (acc) => continuerSimpleAvecAccession(acc, code, etapeCode));
   } else {
     accessionCourante = null;
     document.getElementById("scan-info-bloc").style.display = "none";
     if (code.length > 2) {
       const msg = rechercheAcc.statut === "mauvaise_campagne"
         ? `Ce code existe mais pas pour la campagne ${session.campagne}.`
-        : `Code "${code}" introuvable.`;
+        : rechercheAcc.statut === "doublon"
+          ? `Code "${code}" en double dans Accessions pour la campagne ${session.campagne} — à corriger dans Grist.`
+          : `Code "${code}" introuvable.`;
       afficherAlerte("alerte-scan", msg, "erreur"); flashEcran("rouge");
     }
   }
@@ -669,7 +717,7 @@ async function ecrireSuivi(actions) {
     const f = act[3] || {};
     cacheSuivi.push({
       id: result.retValues[i], codeIntroId: f.CodeIntro, etapeId: f.Etape, codePartenaire: f.CodePartenaire || null,
-      reussite: f.Reussite || null, date: f.Date, codeMicrogreffe: f.CodeMicrogreffe || null
+      reussite: f.Reussite || null, date: f.Date, souche: f.Souche || null, codeMicrogreffe: f.CodeMicrogreffe || null
     });
   });
   return result;
@@ -679,7 +727,6 @@ function annulerScan() {
   accessionCourante = null;
   document.getElementById("scan-code").value = "";
   document.getElementById("scan-info-bloc").style.display = "none";
-  masquerChoixSouche();
   masquerAlerte("alerte-scan");
   document.getElementById("scan-code").focus();
 }
@@ -720,7 +767,7 @@ function parserCSV(texte) {
 function indexColonne(entetes, nom) { return entetes.findIndex(h => h.toLowerCase() === nom.toLowerCase()); }
 
 // ── Traite une ligne d'import : mêmes vérifications et mêmes écritures Grist qu'un scan manuel ──
-async function traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, commentaireBrut, etapeCode) {
+async function traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, commentaireBrut, etapeCode, soucheBrut = "") {
   const partiesMG = analyserCodeTube(codeBrut);
   let acc, accId, codeAffiche = codeBrut, codeMicrogreffeParent = null;
 
@@ -740,25 +787,17 @@ async function traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, co
     if (conflit) return { ok: false, message: conflit };
   } else {
     if (partiesMG) return { ok: false, message: "Code composite non attendu pour cette étape." };
-    // Suffixe -S optionnel (ex : CODE-S2) pour préciser la souche quand plusieurs existent pour ce
-    // CodeIntro/cette campagne — pas d'écran interactif possible en import, donc obligatoire si ambigu.
-    const partiesSouche = codeBrut.match(/^(.+)-S(\w+)$/i);
-    const codeBase = partiesSouche ? partiesSouche[1] : codeBrut;
-    const soucheDemandee = partiesSouche ? ("S" + partiesSouche[2]).toUpperCase() : null;
-    const rechercheAcc = trouverAccession(codeBase);
-    if (rechercheAcc.statut === "introuvable") return { ok: false, message: `Accession "${codeBase}" introuvable.` };
+    const rechercheAcc = trouverAccession(codeBrut);
+    if (rechercheAcc.statut === "introuvable") return { ok: false, message: `Accession "${codeBrut}" introuvable.` };
     if (rechercheAcc.statut === "mauvaise_campagne") return { ok: false, message: `Code existe mais pas pour la campagne ${session.campagne}.` };
-    if (rechercheAcc.statut === "ambigu") {
-      if (!soucheDemandee) return { ok: false, message: `Plusieurs souches existent pour "${codeBase}" — préciser avec un suffixe, ex. ${codeBase}-S2.` };
-      acc = rechercheAcc.candidats.find(c => (c.souche || "").toUpperCase() === soucheDemandee);
-      if (!acc) return { ok: false, message: `Souche "${soucheDemandee}" introuvable pour "${codeBase}".` };
-    } else {
-      acc = rechercheAcc.acc;
-    }
-    accId = acc.id; codeAffiche = codeBase + (soucheDemandee ? "-" + soucheDemandee : "");
+    if (rechercheAcc.statut === "doublon") return { ok: false, message: `Code "${codeBrut}" en double dans Accessions pour la campagne ${session.campagne} — à corriger dans Grist.` };
+    acc = rechercheAcc.acc;
+    accId = acc.id; codeAffiche = codeBrut;
     if (dejaScanneeDansSession(acc.id, etapeCode)) return { ok: false, message: "Déjà enregistrée à cette étape (session ou import en cours)." };
     const conflit = verifierContinuitePartenaire(acc.id, etapeCode);
     if (conflit) return { ok: false, message: conflit };
+    const msgRempotage = blocageRempotageObligatoire(acc.id, etapeCode);
+    if (msgRempotage) return { ok: false, message: msgRempotage };
   }
 
   let nbApex = null;
@@ -777,11 +816,29 @@ async function traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, co
     if (!nbBoutures || nbBoutures < 1) return { ok: false, message: "Colonne Nombre obligatoire (≥ 1) pour cette étape." };
   }
 
+  // ── Souche(s) (colonne Souche du CSV) ──
+  let souche = null;
+  if (etapeCode === ETAPE_DEBOURREMENT) {
+    const l = parserSouches(soucheBrut);
+    if (!l.length || !souchesValides(l)) return { ok: false, message: "Colonne Souche obligatoire pour le Débourrement (S1 à S10, séparées par + ou ,)." };
+    souche = SOUCHES_DISPONIBLES.filter(x => l.includes(x)).join(",");
+  } else if (codeMicrogreffeParent) {
+    souche = soucheDuTube(accId, codeMicrogreffeParent);
+  } else {
+    const propos = souchesAProposer(accId, etapeCode);
+    if (propos) {
+      const l = parserSouches(soucheBrut);
+      if (l.length !== 1 || !propos.includes(l[0])) return { ok: false, message: `Colonne Souche obligatoire pour cette accession (une parmi : ${propos.join(", ")}).` };
+      souche = l[0];
+    }
+  }
+
   const fieldsBase = {
     CodeIntro: accId, Methode: session.methode, Etape: session.etape,
     Date: Math.floor(new Date(session.date).getTime() / 1000), Operateur: session.operateur,
     Emplacement: session.emplacement, CodePartenaire: session.codePartenaire
   };
+  if (souche)          fieldsBase.Souche       = souche;
   if (reussite)        fieldsBase.Reussite     = reussite;
   if (commentaireBrut) fieldsBase.Commentaires = commentaireBrut;
   if (ETAPES_NB_APEX_SIMPLE.includes(etapeCode)) fieldsBase.NbApex = nbApex;
@@ -836,6 +893,7 @@ async function importerCSV() {
   const idxReussite = indexColonne(entetes, "Reussite");
   const idxNbApex = indexColonne(entetes, "NbApex");
   const idxCommentaire = indexColonne(entetes, "Commentaires");
+  const idxSouche = indexColonne(entetes, "Souche");
   if (idxCode === -1) return afficherAlerte("alerte-scan", 'Colonne "CodeIntro" introuvable dans le fichier.', "erreur");
   if (donnees.length === 0) return afficherAlerte("alerte-scan", "Fichier vide (aucune ligne de données).", "erreur");
 
@@ -854,6 +912,7 @@ async function importerCSV() {
     const reussiteBrut = idxReussite !== -1 ? (l[idxReussite] || "").trim() : "";
     const nbApexBrut = idxNbApex !== -1 ? (l[idxNbApex] || "").trim() : "";
     const commentaireBrut = idxCommentaire !== -1 ? (l[idxCommentaire] || "").trim() : "";
+    const soucheBrut = idxSouche !== -1 ? (l[idxSouche] || "").trim() : "";
 
     let reussite = null;
     if (/^échec$|^echec$/i.test(reussiteBrut)) reussite = "Échec";
@@ -861,7 +920,7 @@ async function importerCSV() {
     else if (/^conforme$/i.test(reussiteBrut)) reussite = "Conforme";
     else if (reussiteBrut) { resultats.push({ ligne: numLigne, code: codeBrut, ok: false, message: `Valeur Reussite non reconnue : "${reussiteBrut}"` }); continue; }
 
-    const res = await traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, commentaireBrut, etapeCode);
+    const res = await traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, commentaireBrut, etapeCode, soucheBrut);
     resultats.push({ ligne: numLigne, code: codeBrut, ok: res.ok, message: res.message, avertissement: res.avertissement });
   }
 
@@ -908,6 +967,18 @@ async function enregistrerScan(reussite) {
   if (etapeCode === ETAPE_CONTROLE && !accessionCourante.codeMicrogreffeParent) {
     return afficherAlerte("alerte-scan", "Scanner d'abord un code de tube valide (ex : CODE-A).", "erreur");
   }
+  // ── Souche(s) à enregistrer dans Suivi2.Souche ──
+  let souche = null;
+  if (etapeCode === ETAPE_DEBOURREMENT) {
+    const cochees = [...document.querySelectorAll("#souches-cases input:checked")].map(i => i.value);
+    if (!cochees.length) return afficherAlerte("alerte-scan", "Choisir au moins une souche utilisée.", "erreur");
+    souche = cochees.join(",");
+  } else if (accessionCourante.codeMicrogreffeParent) {
+    souche = soucheDuTube(accessionCourante.id, accessionCourante.codeMicrogreffeParent);
+  } else if (souchesAProposer(accessionCourante.id, etapeCode)) {
+    souche = document.getElementById("scan-souche").value;
+    if (!souche) return afficherAlerte("alerte-scan", "Choisir la souche concernée.", "erreur");
+  }
   enRegistrement = true;
   const bc = document.getElementById("btn-confirmer"), be = document.getElementById("btn-echec");
   bc.disabled = be.disabled = true;
@@ -920,6 +991,7 @@ async function enregistrerScan(reussite) {
   };
   const commentaire = document.getElementById("scan-commentaire").value;
   if (reussite)    fieldsBase.Reussite     = reussite;
+  if (souche)      fieldsBase.Souche       = souche;
   if (commentaire) fieldsBase.Commentaires = commentaire;
   if (ETAPES_NB_APEX_SIMPLE.includes(etapeCode)) fieldsBase.NbApex = nbApex;
   // Contrôle : une seule ligne, sur le tube lui-même (le lot de boutures gère son propre code).
@@ -1001,7 +1073,6 @@ function nouvelleSession() {
   session={}; scansSession=[]; accessionCourante=null; enRegistrement=false;
   document.getElementById("scan-code").value="";
   document.getElementById("scan-info-bloc").style.display="none";
-  masquerChoixSouche();
   document.getElementById("section-historique").style.display="none";
   document.getElementById("cfg-date").value=new Date().toISOString().split("T")[0];
   afficherEcran("ecran-config");
