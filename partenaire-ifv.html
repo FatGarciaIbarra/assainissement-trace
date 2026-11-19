@@ -285,7 +285,7 @@ function nbBouturesExistantes(accId, mgParente) {
 }
  
 let cacheAccessions = {}, cacheOperateurs = [], cacheEtapes = [];
-// Table facultative Ref_Emplacements (colonnes : Emplacement, Etape = lien vers Ref_Etapes, vide = pas d'étape associée).
+// Table facultative Ref_Emplacements (colonne : Emplacement).
 // Absente ou vide : le champ Emplacement reste une saisie libre, comme avant.
 let cacheEmplacements = [];
 const VALEUR_AUTRE = "__autre__";
@@ -301,7 +301,6 @@ async function init() {
   document.getElementById("cfg-date").value = new Date().toISOString().split("T")[0];
   afficherEcran("ecran-config");
   document.getElementById("cfg-methode").addEventListener("change", filtrerEtapesConfig);
-  document.getElementById("cfg-etape").addEventListener("change", majListeEmplacements);
   document.getElementById("cfg-emplacement-liste").addEventListener("change", majChampAutreEmplacement);
   majListeEmplacements();
 }
@@ -349,7 +348,7 @@ async function chargerDonnees() {
  
     try {
       const emp = await grist.docApi.fetchTable("Ref_Emplacements");
-      cacheEmplacements = emp.id.map((id, i) => ({ nom: (emp.Emplacement[i] || "").toString().trim(), etape: emp.Etape ? emp.Etape[i] : null }))
+      cacheEmplacements = emp.id.map((id, i) => ({ nom: (emp.Emplacement[i] || "").toString().trim() }))
         .filter(e => e.nom);
     } catch (e) { cacheEmplacements = []; /* table absente : saisie libre */ }
  
@@ -374,29 +373,17 @@ function filtrerEtapesConfig() {
   cacheEtapes.filter(e => e.methode === m || e.methode === "Commune").forEach(e => sel.innerHTML += `<option value="${e.id}">${e.nom}</option>`);
 }
  
-// ── Emplacement : liste déroulante (probables en premier, puis les autres, puis « Autre… ») ──
-function emplacementLieAEtape(e, etapeId) {
-  if (e.etape === null || e.etape === undefined || e.etape === "" || e.etape === 0) return false;
-  // Etape peut être un lien (id de ligne Ref_Etapes) ou le code de l'étape en texte.
-  return e.etape === etapeId || e.etape === codeEtapeParId(etapeId);
-}
+// ── Emplacement : liste déroulante (emplacements par ordre alphabétique, puis « Autre… ») ──
 function majListeEmplacements() {
   const liste = document.getElementById("cfg-emplacement-liste");
   const libre = document.getElementById("cfg-emplacement");
   if (cacheEmplacements.length === 0) { // pas de table : saisie libre
     liste.style.display = "none"; libre.style.display = ""; return;
   }
-  const etapeId = parseInt(document.getElementById("cfg-etape").value) || null;
-  const probables = [...new Set(cacheEmplacements.filter(e => etapeId && emplacementLieAEtape(e, etapeId)).map(e => e.nom))];
-  const autres = [...new Set(cacheEmplacements.map(e => e.nom))].filter(n => !probables.includes(n)).sort((a, b) => a.localeCompare(b));
+  const noms = [...new Set(cacheEmplacements.map(e => e.nom))].sort((a, b) => a.localeCompare(b));
   const opt = n => `<option value="${n.replace(/"/g, "&quot;")}">${n}</option>`;
-  liste.innerHTML = (probables.length ? "" : '<option value="">— Choisir —</option>') +
-    probables.map(opt).join("") +
-    (probables.length && autres.length ? '<option disabled>──────────</option>' : "") +
-    autres.map(opt).join("") +
-    `<option value="${VALEUR_AUTRE}">Autre…</option>`;
+  liste.innerHTML = '<option value="">— Choisir —</option>' + noms.map(opt).join("") + `<option value="${VALEUR_AUTRE}">Autre…</option>`;
   liste.style.display = "";
-  if (probables.length) liste.value = probables[0]; // le plus probable est présélectionné
   majChampAutreEmplacement();
 }
 function majChampAutreEmplacement() {
@@ -876,7 +863,7 @@ function indexColonne(entetes, ...noms) {
 }
  
 // Lecture du CSV : UTF-8 d'abord (strict) ; si le fichier n'est pas en UTF-8 (cas d'Excel « CSV » classique,
-// encodé Windows-1252), repli sur Windows-1252 — sinon le « µ » devient «   » et les codes ne sont plus reconnus.
+// encodé Windows-1252), repli sur Windows-1252 — sinon le « µ » devient « � » et les codes ne sont plus reconnus.
 async function lireFichierCSV(fichier) {
   const buf = await fichier.arrayBuffer();
   try { return new TextDecoder("utf-8", { fatal: true }).decode(buf).replace(/^\uFEFF/, ""); }
@@ -1261,3 +1248,4 @@ function masquerAlerte(id) { const el=document.getElementById(id); el.className=
 </script>
 </body>
 </html>
+ 
