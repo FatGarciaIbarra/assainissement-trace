@@ -123,10 +123,7 @@ textarea { resize: vertical; min-height: 60px; }
           <option value="2029-2030">2029-2030</option>
           <option value="2030-2031">2030-2031</option>
         </select></div>
-        <div class="champ"><label>Emplacement <span class="requis">*</span></label>
-          <select id="cfg-emplacement-liste" style="display:none"><option value="">— Choisir —</option></select>
-          <input type="text" id="cfg-emplacement" placeholder="Ex : Serre B, étagère 3" style="display:none">
-        </div>
+        <div class="champ"><label>Emplacement <span class="requis">*</span></label><input type="text" id="cfg-emplacement" placeholder="Ex : Serre B, étagère 3"></div>
       </div>
     </div>
     <div class="btns"><button class="btn btn-principal" onclick="demarrerSession()">Démarrer la session →</button></div>
@@ -151,7 +148,7 @@ textarea { resize: vertical; min-height: 60px; }
             <div class="champs-acc-titre">Données complémentaires</div>
             <div class="champ" id="champ-nbApex" style="display:none"><label>Nombre d'apex traités <span class="requis">*</span></label><input type="number" id="scan-nbApex" min="0" placeholder="Ex : 20"></div>
             <div class="champ" id="champ-nbApexLignes" style="display:none"><label>Nombre d'apex <span class="requis">*</span></label><input type="number" id="scan-nbApexLignes" min="1" placeholder="Ex : 12"></div>
-            <div class="champ" id="champ-souches-debourrement" style="display:none"><label>Souches utilisées <span class="requis">*</span></label><div id="souches-cases" style="display:flex;flex-wrap:wrap;gap:6px 14px"></div></div>
+            <div class="champ" id="champ-souches-debourrement" style="display:none"><label id="label-souches">Souches utilisées <span class="requis">*</span></label><div id="souches-cases" style="display:flex;flex-wrap:wrap;gap:6px 14px"></div></div>
             <div class="champ" id="champ-souche-etape" style="display:none"><label>Souche concernée <span class="requis">*</span></label><select id="scan-souche"><option value="">— Choisir —</option></select></div>
             <div class="champ" id="champ-nbBoutures" style="display:none"><label>Nombre de boutures <span class="requis">*</span></label><input type="number" id="scan-nbBoutures" min="1" placeholder="Ex : 5"></div>
             <div class="champ"><label>Commentaire</label><textarea id="scan-commentaire" placeholder="Observation…"></textarea></div>
@@ -169,7 +166,7 @@ textarea { resize: vertical; min-height: 60px; }
       <div class="section-corps">
         <div class="champ"><label>Fichier</label><input type="file" id="import-fichier" accept=".csv"></div>
         <div style="font-size:11px;color:var(--texte-2);margin-bottom:10px;line-height:1.6">
-          Colonnes : <strong>CodeIntro</strong> (obligatoire, ou <code>CodeIntro-A</code> (code du tube) pour Multiplication/Contrôle — les anciens codes <code>CodeIntro-M01</code> restent reconnus , <strong>Nombre</strong> (Croissance en tube / Multiplication uniquement), <strong>Reussite</strong> (vide = confirmé/conforme, sinon <code>Echec</code>, <code>NonConforme</code> ou <code>Conforme</code>), <strong>Quantite</strong> (Cryothérapie / Régénération méristèmes uniquement : nombre d'apex traités ; l'ancien nom <code>NbApex</code> reste accepté), <strong>Souche</strong> (Débourrement : souches utilisées, S1 à S10, séparées par <code>+</code> ex. <code>S1+S3</code>, ou <code>Pot</code> pour une accession de serre ; autres étapes : une seule souche, uniquement si plusieurs souches ont été utilisées au débourrement), <strong>Commentaires</strong>.
+          Colonnes : <strong>CodeIntro</strong> (obligatoire, ou <code>CodeIntro-A</code> (code du tube) pour Multiplication/Contrôle — les anciens codes <code>CodeIntro-M01</code> restent reconnus , <strong>Nombre</strong> (Croissance en tube / Multiplication uniquement), <strong>Reussite</strong> (vide = confirmé/conforme, sinon <code>Echec</code>, <code>NonConforme</code> ou <code>Conforme</code>), <strong>Quantite</strong> (Cryothérapie / Régénération méristèmes uniquement : nombre d'apex traités ; l'ancien nom <code>NbApex</code> reste accepté), <strong>Souche</strong> (Réception : souches réceptionnées ; Débourrement : souches utilisées parmi celles réceptionnées, S1 à S10, séparées par <code>+</code> ex. <code>S1+S3</code>, ou <code>Pot</code> pour une accession de serre ; autres étapes : une seule souche, uniquement si plusieurs souches ont été utilisées au débourrement), <strong>Commentaires</strong>.
         </div>
         <div class="btns"><button class="btn btn-principal" id="btn-import" onclick="importerCSV()">Importer</button></div>
         <div id="resultat-import"></div>
@@ -259,6 +256,7 @@ function prochainsCodesTubes(accId, nb) {
 // (liste limitée aux souches utilisées). Les étapes par tube (Multiplication, Contrôle) reprennent la souche
 // du tube, fixée à la Croissance en tube.
 const ETAPE_DEBOURREMENT = "DEBOURREMENT";
+const ETAPE_RECEPTION = "RECEPTION";
 const SOUCHES_DISPONIBLES = Array.from({ length: 10 }, (_, i) => "S" + (i + 1));
 // Accessions venant des serres : pas de souche, mention « Pot » à la place (exclusive avec S1…S10).
 const SOUCHE_POT = "Pot";
@@ -272,6 +270,13 @@ function soucheUtilisees(accId) {
   cacheSuivi.filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) === ETAPE_DEBOURREMENT)
     .forEach(r => parserSouches(r.souche).forEach(x => set.add(x)));
   return SOUCHES_DISPONIBLES.filter(x => set.has(x));
+}
+// Souches réceptionnées pour l'accession (colonne Souche des lignes RECEPTION), en majuscules ; « POT » inclus.
+function soucheReceptionnees(accId) {
+  const set = new Set();
+  cacheSuivi.filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) === ETAPE_RECEPTION)
+    .forEach(r => parserSouches(r.souche).forEach(x => set.add(x)));
+  return [...set];
 }
 // Souche d'un tube : celle choisie lors de la Croissance en tube (tube ou bouture "A-01" → tube "A").
 function soucheDuTube(accId, tube) {
@@ -297,11 +302,23 @@ function preparerChampsSouche(accId, etapeCode) {
   const blocDeb = document.getElementById("champ-souches-debourrement");
   const blocEtape = document.getElementById("champ-souche-etape");
   blocDeb.style.display = "none"; blocEtape.style.display = "none";
-  if (etapeCode === ETAPE_DEBOURREMENT) {
-    const dejaUtilisees = soucheUtilisees(accId);
-    const dejaPot = cacheSuivi.some(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) === ETAPE_DEBOURREMENT && parserSouches(r.souche).includes("POT"));
-    document.getElementById("souches-cases").innerHTML = [SOUCHE_POT, ...SOUCHES_DISPONIBLES].map(x =>
-      `<label style="display:inline-flex;align-items:center;gap:4px;font-size:12px"><input type="checkbox" value="${x}" onchange="exclusionPot(this)" ${(x === SOUCHE_POT ? dejaPot : dejaUtilisees.includes(x)) ? "checked" : ""}> ${x === SOUCHE_POT ? "Pot (serre)" : x}</label>`).join("");
+  if (etapeCode === ETAPE_RECEPTION || etapeCode === ETAPE_DEBOURREMENT) {
+    // Réception : toutes les souches S1 à S10 + Pot. Débourrement : uniquement celles réceptionnées
+    // (liste complète si aucune souche n'a été enregistrée à la réception, anciennes données).
+    const toutes = [SOUCHE_POT, ...SOUCHES_DISPONIBLES];
+    let proposables = toutes, precochees = [], libelle = "Souches réceptionnées";
+    if (etapeCode === ETAPE_DEBOURREMENT) {
+      const recues = soucheReceptionnees(accId);
+      if (recues.length) proposables = toutes.filter(x => recues.includes(x.toUpperCase()));
+      const dejaUtilisees = cacheSuivi.filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) === ETAPE_DEBOURREMENT)
+        .flatMap(r => parserSouches(r.souche)).map(x => x.toUpperCase());
+      precochees = proposables.filter(x => dejaUtilisees.includes(x.toUpperCase()));
+      if (!precochees.length && proposables.length === 1) precochees = [...proposables];
+      libelle = recues.length ? "Souches utilisées (parmi celles réceptionnées)" : "Souches utilisées";
+    }
+    document.getElementById("label-souches").innerHTML = `${libelle} <span class="requis">*</span>`;
+    document.getElementById("souches-cases").innerHTML = proposables.map(x =>
+      `<label style="display:inline-flex;align-items:center;gap:4px;font-size:12px"><input type="checkbox" value="${x}" onchange="exclusionPot(this)" ${precochees.includes(x) ? "checked" : ""}> ${x === SOUCHE_POT ? "Pot (serre)" : x}</label>`).join("");
     blocDeb.style.display = "";
     return;
   }
@@ -327,10 +344,7 @@ function prochainsCodesBoutures(accId, tube, nb) {
 }
  
 let cacheAccessions = {}, cacheOperateurs = [], cacheEtapes = [];
-// Table facultative Ref_Emplacements (colonnes : Emplacement ; Partenaire, facultative : IFV / INRAE…, vide = proposé à tous).
-// Absente ou vide : le champ Emplacement reste une saisie libre, comme avant.
-let cacheEmplacements = [];
-const VALEUR_AUTRE = "__autre__";
+ 
 let cacheSuivi = [];
 let session = {}, scansSession = [], accessionCourante = null, enRegistrement = false;
  
@@ -343,8 +357,6 @@ async function init() {
   document.getElementById("cfg-date").value = new Date().toISOString().split("T")[0];
   afficherEcran("ecran-config");
   document.getElementById("cfg-methode").addEventListener("change", filtrerEtapesConfig);
-  document.getElementById("cfg-emplacement-liste").addEventListener("change", majChampAutreEmplacement);
-  majListeEmplacements();
 }
 window.addEventListener("load", init);
  
@@ -388,12 +400,6 @@ async function chargerDonnees() {
       cacheAccessions[code].push(entree);
     });
  
-    try {
-      const emp = await grist.docApi.fetchTable("Ref_Emplacements");
-      cacheEmplacements = emp.id.map((id, i) => ({ nom: (emp.Emplacement[i] || "").toString().trim(), partenaire: emp.Partenaire ? (emp.Partenaire[i] || "").toString().trim() : "" }))
-        .filter(e => e.nom && (!e.partenaire || e.partenaire.toUpperCase() === PARTENAIRE_CONFIG.code.toUpperCase()));
-    } catch (e) { cacheEmplacements = []; /* table absente : saisie libre */ }
- 
     const suivi = await grist.docApi.fetchTable("Suivi2");
     cacheSuivi = suivi.id.map((id, i) => ({
       id,
@@ -414,32 +420,6 @@ function filtrerEtapesConfig() {
   sel.innerHTML = '<option value="">— Choisir —</option>';
   if (!m) return;
   cacheEtapes.filter(e => e.methode === m || e.methode === "Commune").forEach(e => sel.innerHTML += `<option value="${e.id}">${e.nom}</option>`);
-}
- 
-// ── Emplacement : liste déroulante (emplacements par ordre alphabétique, puis « Autre… ») ──
-function majListeEmplacements() {
-  const liste = document.getElementById("cfg-emplacement-liste");
-  const libre = document.getElementById("cfg-emplacement");
-  if (cacheEmplacements.length === 0) { // pas de table : saisie libre
-    liste.style.display = "none"; libre.style.display = ""; return;
-  }
-  const noms = [...new Set(cacheEmplacements.map(e => e.nom))].sort((a, b) => a.localeCompare(b));
-  const opt = n => `<option value="${n.replace(/"/g, "&quot;")}">${n}</option>`;
-  liste.innerHTML = '<option value="">— Choisir —</option>' + noms.map(opt).join("") + `<option value="${VALEUR_AUTRE}">Autre…</option>`;
-  liste.style.display = "";
-  majChampAutreEmplacement();
-}
-function majChampAutreEmplacement() {
-  const liste = document.getElementById("cfg-emplacement-liste");
-  const libre = document.getElementById("cfg-emplacement");
-  const autre = liste.style.display !== "none" && liste.value === VALEUR_AUTRE;
-  libre.style.display = autre ? "" : (liste.style.display === "none" ? "" : "none");
-  if (autre) libre.focus();
-}
-function lireEmplacementConfig() {
-  const liste = document.getElementById("cfg-emplacement-liste");
-  if (liste.style.display === "none") return document.getElementById("cfg-emplacement").value.trim();
-  return liste.value === VALEUR_AUTRE ? document.getElementById("cfg-emplacement").value.trim() : liste.value;
 }
  
 function codeEtapeParId(id) { const e = cacheEtapes.find(e => e.id === id); return e ? e.code : null; }
@@ -651,7 +631,7 @@ async function demarrerSession() {
   const etape = etapeEl.value;
   const etapeNom = etapeEl.options[etapeEl.selectedIndex]?.text || "";
   const campagne = document.getElementById("cfg-campagne").value;
-  const emplacement = lireEmplacementConfig();
+  const emplacement = document.getElementById("cfg-emplacement").value.trim();
   if (!date)        return afficherAlerte("alerte-config", "La date est obligatoire.", "erreur");
   if (!operateur)   return afficherAlerte("alerte-config", "L'opérateur est obligatoire.", "erreur");
   if (!methode)     return afficherAlerte("alerte-config", "La méthode est obligatoire.", "erreur");
@@ -935,13 +915,17 @@ async function traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, co
  
   // ── Souche(s) (colonne Souche du CSV) ──
   let souche = null;
-  if (etapeCode === ETAPE_DEBOURREMENT) {
+  if (etapeCode === ETAPE_DEBOURREMENT || etapeCode === ETAPE_RECEPTION) {
     const l = parserSouches(soucheBrut);
+    if (etapeCode === ETAPE_DEBOURREMENT) {
+      const recues = soucheReceptionnees(accId);
+      if (recues.length && l.some(x => !recues.includes(x))) return { ok: false, message: "Souche non réceptionnée pour cette accession (souches réceptionnées : " + recues.join(", ") + ")." };
+    }
     if (l.includes("POT")) {
       if (l.length > 1) return { ok: false, message: "« Pot » ne se combine pas avec une souche S1 à S10." };
       souche = SOUCHE_POT;
     } else {
-      if (!l.length || !souchesValides(l)) return { ok: false, message: "Colonne Souche obligatoire pour le Débourrement (S1 à S10 séparées par + ou ,, ou Pot)." };
+      if (!l.length || !souchesValides(l)) return { ok: false, message: "Colonne Souche obligatoire pour la Réception et le Débourrement (S1 à S10 séparées par + ou ,, ou Pot)." };
       souche = SOUCHES_DISPONIBLES.filter(x => l.includes(x)).join(",");
     }
   } else if (codeMicrogreffeParent) {
@@ -1094,10 +1078,15 @@ async function enregistrerScan(reussite) {
   }
   // ── Souche(s) à enregistrer dans Suivi2.Souche ──
   let souche = null;
-  if (etapeCode === ETAPE_DEBOURREMENT) {
+  if (etapeCode === ETAPE_DEBOURREMENT || etapeCode === ETAPE_RECEPTION) {
     const cochees = [...document.querySelectorAll("#souches-cases input:checked")].map(i => i.value);
-    if (!cochees.length) return afficherAlerte("alerte-scan", "Choisir au moins une souche utilisée.", "erreur");
+    if (!cochees.length) return afficherAlerte("alerte-scan", etapeCode === ETAPE_RECEPTION ? "Choisir au moins une souche réceptionnée." : "Choisir au moins une souche utilisée.", "erreur");
     souche = cochees.join(",");
+    if (etapeCode === ETAPE_DEBOURREMENT) {
+      const recues = soucheReceptionnees(accessionCourante.id);
+      if (recues.length && cochees.some(x => !recues.includes(x.toUpperCase())))
+        return afficherAlerte("alerte-scan", "Souche non réceptionnée pour cette accession (souches réceptionnées : " + recues.join(", ") + ").", "erreur");
+    }
     if (cochees.includes(SOUCHE_POT) && cochees.length > 1) return afficherAlerte("alerte-scan", "« Pot » ne se combine pas avec une souche S1 à S10.", "erreur");
   } else if (accessionCourante.codeMicrogreffeParent) {
     souche = soucheDuTube(accessionCourante.id, accessionCourante.codeMicrogreffeParent);
