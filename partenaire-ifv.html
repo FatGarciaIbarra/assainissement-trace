@@ -285,7 +285,7 @@ function nbBouturesExistantes(accId, mgParente) {
 }
  
 let cacheAccessions = {}, cacheOperateurs = [], cacheEtapes = [];
-// Table facultative Ref_Emplacements (colonne : Emplacement).
+// Table facultative Ref_Emplacements (colonnes : Emplacement ; Partenaire, facultative : IFV / INRAE…, vide = proposé à tous).
 // Absente ou vide : le champ Emplacement reste une saisie libre, comme avant.
 let cacheEmplacements = [];
 const VALEUR_AUTRE = "__autre__";
@@ -348,8 +348,8 @@ async function chargerDonnees() {
  
     try {
       const emp = await grist.docApi.fetchTable("Ref_Emplacements");
-      cacheEmplacements = emp.id.map((id, i) => ({ nom: (emp.Emplacement[i] || "").toString().trim() }))
-        .filter(e => e.nom);
+      cacheEmplacements = emp.id.map((id, i) => ({ nom: (emp.Emplacement[i] || "").toString().trim(), partenaire: emp.Partenaire ? (emp.Partenaire[i] || "").toString().trim() : "" }))
+        .filter(e => e.nom && (!e.partenaire || e.partenaire.toUpperCase() === PARTENAIRE_CONFIG.code.toUpperCase()));
     } catch (e) { cacheEmplacements = []; /* table absente : saisie libre */ }
  
     const suivi = await grist.docApi.fetchTable("Suivi2");
