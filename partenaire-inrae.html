@@ -98,7 +98,7 @@ textarea { resize: vertical; min-height: 60px; }
 <div class="flash-overlay" id="flash"></div>
 <div class="container">
   <div id="ecran-chargement" class="chargement">Connexion à Grist <span class="spinner"></span></div>
-
+ 
   <div class="ecran" id="ecran-config">
     <div id="alerte-config" class="alerte"></div>
     <div class="partenaire-tag" id="partenaire-tag"></div>
@@ -123,12 +123,15 @@ textarea { resize: vertical; min-height: 60px; }
           <option value="2029-2030">2029-2030</option>
           <option value="2030-2031">2030-2031</option>
         </select></div>
-        <div class="champ"><label>Emplacement <span class="requis">*</span></label><input type="text" id="cfg-emplacement" placeholder="Ex : Serre B, étagère 3"></div>
+        <div class="champ"><label>Emplacement <span class="requis">*</span></label>
+          <select id="cfg-emplacement-liste" style="display:none"><option value="">— Choisir —</option></select>
+          <input type="text" id="cfg-emplacement" placeholder="Ex : Serre B, étagère 3" style="display:none">
+        </div>
       </div>
     </div>
     <div class="btns"><button class="btn btn-principal" onclick="demarrerSession()">Démarrer la session →</button></div>
   </div>
-
+ 
   <div class="ecran" id="ecran-scan">
     <div class="session-badge">
       <div><div><strong id="badge-etape">—</strong></div><div class="session-info" id="badge-info">—</div></div>
@@ -178,7 +181,7 @@ textarea { resize: vertical; min-height: 60px; }
     </div>
     <div class="btns"><button class="btn btn-secondaire" onclick="terminerSession()">Terminer la session</button></div>
   </div>
-
+ 
   <div class="ecran" id="ecran-fin">
     <div class="section">
       <div class="section-titre">Session terminée</div>
@@ -187,7 +190,7 @@ textarea { resize: vertical; min-height: 60px; }
     <div class="btns"><button class="btn btn-principal" onclick="nouvelleSession()">Nouvelle session</button></div>
   </div>
 </div>
-
+ 
 <script>
 // ════════════════════════════════════════════════
 //  ▼▼▼ SEULE PARTIE À MODIFIER PAR PARTENAIRE ▼▼▼
@@ -211,7 +214,7 @@ const PARTENAIRE_CONFIG = {
 // ════════════════════════════════════════════════
 //  ▲▲▲ FIN DE LA PARTIE À MODIFIER ▲▲▲
 // ════════════════════════════════════════════════
-
+ 
 const ETAPE_CRYOTHERAPIE = "B_CRYOTHERAPIE";
 const ETAPE_REGEN_MERISTE = "B_REGEN_MERISTE";
 const ETAPE_CROISSANCE_TUBE = "B_CROISSANCE";
@@ -221,7 +224,7 @@ const ETAPE_CONTROLE = "B_CONTROLE";
 const ETAPES_NB_APEX_SIMPLE = [ETAPE_CRYOTHERAPIE, ETAPE_REGEN_MERISTE];
 // Étapes scannées via un code composite CODEACCESSION-A (tube identifié individuellement).
 const ETAPES_COMPOSITE_M = [ETAPE_MULT_PLANTES, ETAPE_CONTROLE];
-
+ 
 // ── Format des codes de tubes (colonne CodeMicrogreffe) ──
 // Nouveaux codes : tube de Croissance en tube = lettre(s) A, B, C… (puis AA, AB… après Z) ;
 // bouture de Multiplication in vitro = tube + numéro à 2 chiffres : A-01, A-02…
@@ -313,7 +316,7 @@ function preparerChampsSouche(accId, etapeCode) {
     };
   }
 }
-
+ 
 // Codes de boutures (numéros) à créer sous un tube : continue après les boutures déjà présentes (anciennes -MB01 comprises).
 function prochainsCodesBoutures(accId, tube, nb) {
   const deja = cacheSuivi.filter(r =>
@@ -322,13 +325,17 @@ function prochainsCodesBoutures(accId, tube, nb) {
   ).length;
   return Array.from({ length: nb }, (_, i) => `${tube}-${String(deja + i + 1).padStart(2, "0")}`);
 }
-
+ 
 let cacheAccessions = {}, cacheOperateurs = [], cacheEtapes = [];
+// Table facultative Ref_Emplacements (colonnes : Emplacement ; Partenaire, facultative : IFV / INRAE…, vide = proposé à tous).
+// Absente ou vide : le champ Emplacement reste une saisie libre, comme avant.
+let cacheEmplacements = [];
+const VALEUR_AUTRE = "__autre__";
 let cacheSuivi = [];
 let session = {}, scansSession = [], accessionCourante = null, enRegistrement = false;
-
+ 
 grist.ready({ requiredAccess: "full" });
-
+ 
 async function init() {
   appliquerConfig();
   await chargerDonnees();
@@ -336,16 +343,18 @@ async function init() {
   document.getElementById("cfg-date").value = new Date().toISOString().split("T")[0];
   afficherEcran("ecran-config");
   document.getElementById("cfg-methode").addEventListener("change", filtrerEtapesConfig);
+  document.getElementById("cfg-emplacement-liste").addEventListener("change", majChampAutreEmplacement);
+  majListeEmplacements();
 }
 window.addEventListener("load", init);
-
+ 
 function appliquerConfig() {
   document.getElementById("partenaire-tag").textContent = PARTENAIRE_CONFIG.nom;
   document.title = "Saisie — " + PARTENAIRE_CONFIG.nom;
 }
-
+ 
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
-
+ 
 async function chargerDonnees() {
   try {
     const [ops, etapes, accs] = await Promise.all([
@@ -357,11 +366,11 @@ async function chargerDonnees() {
     const selOp = document.getElementById("cfg-operateur");
     selOp.innerHTML = '<option value="">— Choisir —</option>';
     cacheOperateurs.forEach(op => selOp.innerHTML += `<option value="${op.id}">${op.nom}</option>`);
-
+ 
     const exclus = PARTENAIRE_CONFIG.etapesExclues || [];
     cacheEtapes = etapes.id.map((id, i) => ({ id, code: etapes.CodeEtape[i], nom: etapes.NomEtape[i], methode: etapes.Methode[i], ordre: etapes.OrdreAffichage[i] }))
       .filter(e => !exclus.includes(e.code)).sort((a,b) => a.ordre - b.ordre);
-
+ 
     const mc = PARTENAIRE_CONFIG.methodes || [];
     const toutes = [...new Set(cacheEtapes.filter(e => e.methode !== "Commune").map(e => e.methode))];
     const dispo = mc.length > 0 ? toutes.filter(m => mc.includes(m)) : toutes;
@@ -369,7 +378,7 @@ async function chargerDonnees() {
     selM.innerHTML = '<option value="">— Choisir —</option>';
     dispo.forEach(m => selM.innerHTML += `<option value="${m}">${m}</option>`);
     if (PARTENAIRE_CONFIG.methodeImposee && dispo.length === 1) { selM.value = dispo[0]; selM.disabled = true; filtrerEtapesConfig(); }
-
+ 
     accs.id.forEach((id, i) => {
       const c = accs.CodeIntro[i];
       if (!c) return;
@@ -378,7 +387,13 @@ async function chargerDonnees() {
       if (!cacheAccessions[code]) cacheAccessions[code] = [];
       cacheAccessions[code].push(entree);
     });
-
+ 
+    try {
+      const emp = await grist.docApi.fetchTable("Ref_Emplacements");
+      cacheEmplacements = emp.id.map((id, i) => ({ nom: (emp.Emplacement[i] || "").toString().trim(), partenaire: emp.Partenaire ? (emp.Partenaire[i] || "").toString().trim() : "" }))
+        .filter(e => e.nom && (!e.partenaire || e.partenaire.toUpperCase() === PARTENAIRE_CONFIG.code.toUpperCase()));
+    } catch (e) { cacheEmplacements = []; /* table absente : saisie libre */ }
+ 
     const suivi = await grist.docApi.fetchTable("Suivi2");
     cacheSuivi = suivi.id.map((id, i) => ({
       id,
@@ -392,7 +407,7 @@ async function chargerDonnees() {
     }));
   } catch(e) { afficherAlerte("alerte-config", "Erreur de chargement : " + e.message, "erreur"); }
 }
-
+ 
 function filtrerEtapesConfig() {
   const m = document.getElementById("cfg-methode").value;
   const sel = document.getElementById("cfg-etape");
@@ -400,10 +415,36 @@ function filtrerEtapesConfig() {
   if (!m) return;
   cacheEtapes.filter(e => e.methode === m || e.methode === "Commune").forEach(e => sel.innerHTML += `<option value="${e.id}">${e.nom}</option>`);
 }
-
+ 
+// ── Emplacement : liste déroulante (emplacements par ordre alphabétique, puis « Autre… ») ──
+function majListeEmplacements() {
+  const liste = document.getElementById("cfg-emplacement-liste");
+  const libre = document.getElementById("cfg-emplacement");
+  if (cacheEmplacements.length === 0) { // pas de table : saisie libre
+    liste.style.display = "none"; libre.style.display = ""; return;
+  }
+  const noms = [...new Set(cacheEmplacements.map(e => e.nom))].sort((a, b) => a.localeCompare(b));
+  const opt = n => `<option value="${n.replace(/"/g, "&quot;")}">${n}</option>`;
+  liste.innerHTML = '<option value="">— Choisir —</option>' + noms.map(opt).join("") + `<option value="${VALEUR_AUTRE}">Autre…</option>`;
+  liste.style.display = "";
+  majChampAutreEmplacement();
+}
+function majChampAutreEmplacement() {
+  const liste = document.getElementById("cfg-emplacement-liste");
+  const libre = document.getElementById("cfg-emplacement");
+  const autre = liste.style.display !== "none" && liste.value === VALEUR_AUTRE;
+  libre.style.display = autre ? "" : (liste.style.display === "none" ? "" : "none");
+  if (autre) libre.focus();
+}
+function lireEmplacementConfig() {
+  const liste = document.getElementById("cfg-emplacement-liste");
+  if (liste.style.display === "none") return document.getElementById("cfg-emplacement").value.trim();
+  return liste.value === VALEUR_AUTRE ? document.getElementById("cfg-emplacement").value.trim() : liste.value;
+}
+ 
 function codeEtapeParId(id) { const e = cacheEtapes.find(e => e.id === id); return e ? e.code : null; }
 function nomEtapeParId(id)  { const e = cacheEtapes.find(e => e.id === id); return e ? e.nom : null; }
-
+ 
 // ── Résolution d'une accession en tenant compte de la campagne de session ──
 // Un même CodeIntro peut exister pour plusieurs campagnes (reprise après échec) ; pour une campagne
 // donnée il ne doit y en avoir qu'une ligne (les souches se gèrent dans Suivi2.Souche, pas dans Accessions).
@@ -416,7 +457,7 @@ function trouverAccession(code) {
   if (matches.length > 1) return { statut: "doublon" };
   return { statut: "ok", acc: matches[0] };
 }
-
+ 
 // ── Résolution d'une accession par le tube qu'elle porte (étapes Multiplication/Contrôle) ──
 // Contrairement au scan simple, pas besoin de demander la souche à l'opérateur ici : le numéro
 // de tube (M0x) a été attribué à UNE souche précise lors de la Croissance en tube, donc on
@@ -433,7 +474,7 @@ function trouverAccessionParTube(codeAcc, numMG) {
   if (avecTube.length === 0) return { statut: "tube_introuvable" };
   return { statut: "ok", acc: avecTube[0] };
 }
-
+ 
 // ── Détermine le partenaire "titulaire" actuel de l'accession ──
 // C'est celui de sa dernière RECEPTION réussie, tant qu'aucun CHGT_METHODE n'a eu lieu depuis.
 // Retourne null si jamais réceptionnée avec succès, ou si un CHGT_METHODE l'a rendue "libre" depuis.
@@ -457,29 +498,46 @@ function partenaireActuel(accId) {
   if (chgtMethodeApres) return null;
   return derniereReception.codePartenaire;
 }
-
+ 
 // ── Vérifie la continuité partenaire ──
 // RECEPTION est une porte à usage unique par campagne : dès qu'une réception existe (même
 // partenaire compris), une nouvelle réception est bloquée tant qu'aucun CHGT_METHODE n'a eu lieu.
 // Pour toute autre étape : une accession jamais réceptionnée bloque tout ; une accession déjà
 // titulaire d'un partenaire ne peut être travaillée que par ce partenaire, sauf CHGT_METHODE,
 // qui est justement la porte de sortie pour la transférer à un autre.
+// ── Étape « À reprogrammer » : l'accession est perdue pour la campagne (à reprélever l'année suivante) ──
+// Plus aucune autre étape ne peut lui être appliquée. Détection par code OU nom d'étape contenant « reprogram ».
+function mentionPartenaire(codePartenaire) {
+  return (codePartenaire && codePartenaire !== session.codePartenaire) ? ` (par ${codePartenaire})` : "";
+}
+function etapeEstAReprogrammer(etapeId) {
+  return normTexte(codeEtapeParId(etapeId)).includes("reprogram") || normTexte(nomEtapeParId(etapeId)).includes("reprogram");
+}
+function blocageAReprogrammer(accId) {
+  const ligne = cacheSuivi.find(r => r.codeIntroId === accId && etapeEstAReprogrammer(r.etapeId));
+  const enSession = scansSession.some(sc => sc.ok && sc.accId === accId && sc.etapeCode && etapeEstAReprogrammer((cacheEtapes.find(e => e.code === sc.etapeCode) || {}).id));
+  if (!ligne && !enSession) return null;
+  return `⛔ Accession marquée « À reprogrammer »${ligne ? mentionPartenaire(ligne.codePartenaire) : ""} : plus aucune étape possible, à reprélever la campagne suivante.`;
+}
+ 
 function verifierContinuitePartenaire(accId, etapeCode) {
+  const msgReprog = blocageAReprogrammer(accId);
+  if (msgReprog) return msgReprog;
   if (etapeCode === "CHGT_METHODE") return null;
   const titulaire = partenaireActuel(accId);
-
+ 
   if (etapeCode === "RECEPTION") {
     if (!titulaire) return null;
     return titulaire === session.codePartenaire
       ? `Cette accession a déjà été réceptionnée pour cette campagne. Un changement de méthode est requis avant une nouvelle réception.`
       : `Cette accession a déjà été réceptionnée par un autre partenaire (${titulaire}) pour cette campagne. Un changement de méthode est requis avant une nouvelle réception.`;
   }
-
+ 
   if (!titulaire) return `Cette accession n'a pas encore été réceptionnée. Elle doit d'abord passer par l'étape Réception.`;
   if (titulaire === session.codePartenaire) return null;
   return `Cette accession est actuellement suivie par ${titulaire}. Un changement de méthode (CHGT_METHODE) est requis avant qu'un autre partenaire n'intervienne.`;
 }
-
+ 
 // ── Vérifie qu'on ne réenregistre pas deux fois la même accession à la même étape ──
 // dans la session en cours (même logique que le formulaire IFV).
 // Si une souche est précisée (accession à plusieurs souches), le doublon ne vaut que pour la MÊME souche :
@@ -487,7 +545,7 @@ function verifierContinuitePartenaire(accId, etapeCode) {
 function dejaScanneeDansSession(accId, etapeCode, souche = null) {
   return scansSession.some(s => s.ok && s.accId === accId && s.etapeCode === etapeCode && (!souche || s.souche === souche));
 }
-
+ 
 // ── Avertit (non bloquant) si cette étape a déjà été enregistrée pour cette accession ──
 // (même campagne, toute date confondue) — même logique que le cycle libre d'IFV
 // (Conteneur/Tablard/Thermothérapie) : ne bloque pas, juste un rappel de la dernière étape faite.
@@ -508,7 +566,7 @@ function blocageRempotageObligatoire(accId, etapeCode, souche = null) {
   const aRempote = cacheSuivi.some(r => r.codeIntroId === accId && etapeEstRempotage(r.etapeId) && (!souche || r.souche === souche));
   return aRempote ? null : `Rempotage obligatoire avant le caisson chaud : aucun rempotage enregistré pour cette ${souche ? "souche (" + souche + ")" : "accession"}.`;
 }
-
+ 
 function alerteEtapeDejaFaite(accId, etapeCode, souche = null) {
   if (etapeCodeEstRempotage(etapeCode)) return null; // le rempotage peut être répété : pas d'avertissement
   const historique = cacheSuivi.filter(r => r.codeIntroId === accId && (!souche || r.souche === souche));
@@ -518,7 +576,7 @@ function alerteEtapeDejaFaite(accId, etapeCode, souche = null) {
   const derniereNom = derniere ? (nomEtapeParId(derniere.etapeId) || codeEtapeParId(derniere.etapeId)) : null;
   return `⚠️ Cette étape a déjà été enregistrée pour cette accession. Dernière étape enregistrée : ${derniereNom}.`;
 }
-
+ 
 // ── Avertit (non bloquant) si un échec (ou une non-conformité) a déjà été enregistré ──
 // pour cette accession dans cette campagne. L'opérateur reste libre de continuer — c'est
 // une information, pas une barrière, volontairement pour éviter de trop bloquer le formulaire.
@@ -530,10 +588,34 @@ function alerteEchecAnterieur(accId) {
   const nomEtape = nomEtapeParId(echecs[0].etapeId) || codeEtapeParId(echecs[0].etapeId);
   return `⚠️ Un échec/non-conformité a été enregistré précédemment pour cette accession (étape : ${nomEtape}). Vérifier avant de continuer.`;
 }
-
+ 
 // ── Avertit (non bloquant) si CE TUBE précis a déjà fait l'objet d'un contrôle de conformité ──
 // (contrôle au niveau du tube, pas de l'accession entière — une accession peut avoir plusieurs
 // tubes à des stades différents).
+// ── Alerte non bloquante : nombre de tubes viables de l'accession (au Contrôle) ──
+// Un tube (tube ou bouture) est viable tant que son dernier verdict explicite (Reussite renseignée) n'est ni « Échec » ni « Non conforme ».
+// SEUIL_TUBES : nombre de tubes conformes attendu. 0 = alerte désactivée.
+const SEUIL_TUBES = 5;
+function nbTubesViables(accId) {
+  const parTube = new Map();
+  cacheSuivi.filter(r => r.codeIntroId === accId && r.codeMicrogreffe).forEach(r => {
+    if (!parTube.has(r.codeMicrogreffe)) parTube.set(r.codeMicrogreffe, []);
+    parTube.get(r.codeMicrogreffe).push(r);
+  });
+  let nb = 0;
+  parTube.forEach(lignes => {
+    const verdict = lignes.filter(r => r.reussite).sort((x, y) => y.date - x.date || y.id - x.id)[0];
+    if (!verdict || !["Échec", "Non conforme"].includes(verdict.reussite)) nb++;
+  });
+  return nb;
+}
+function alerteNbTubes(accId, etapeCode) {
+  if (!SEUIL_TUBES || etapeCode !== ETAPE_CONTROLE) return null;
+  const nb = nbTubesViables(accId);
+  if (nb >= SEUIL_TUBES) return null;
+  return `⚠️ Seulement ${nb} tube${nb > 1 ? "s" : ""} conforme${nb > 1 ? "s" : ""} sur ${SEUIL_TUBES} requis pour cette accession.`;
+}
+ 
 function alerteControleAnterieur(accId, numMG) {
   const precedent = cacheSuivi
     .filter(r => r.codeIntroId === accId && r.codeMicrogreffe === numMG && codeEtapeParId(r.etapeId) === ETAPE_CONTROLE)
@@ -541,7 +623,7 @@ function alerteControleAnterieur(accId, numMG) {
   if (!precedent) return null;
   return `⚠️ Ce tube a déjà été contrôlé. Résultat précédent : ${precedent.reussite || "Conforme"}.`;
 }
-
+ 
 // ── Configure les boutons Confirmer/Échec selon l'étape : libellés "Conforme/Non conforme" ──
 // pour le contrôle, libellés standards "Confirmer/Déclarer échec" sinon.
 function configurerBoutons(etapeCode) {
@@ -559,7 +641,7 @@ function configurerBoutons(etapeCode) {
     be.onclick = () => enregistrerScan("Échec");
   }
 }
-
+ 
 async function demarrerSession() {
   masquerAlerte("alerte-config");
   const date = document.getElementById("cfg-date").value;
@@ -569,7 +651,7 @@ async function demarrerSession() {
   const etape = etapeEl.value;
   const etapeNom = etapeEl.options[etapeEl.selectedIndex]?.text || "";
   const campagne = document.getElementById("cfg-campagne").value;
-  const emplacement = document.getElementById("cfg-emplacement").value.trim();
+  const emplacement = lireEmplacementConfig();
   if (!date)        return afficherAlerte("alerte-config", "La date est obligatoire.", "erreur");
   if (!operateur)   return afficherAlerte("alerte-config", "L'opérateur est obligatoire.", "erreur");
   if (!methode)     return afficherAlerte("alerte-config", "La méthode est obligatoire.", "erreur");
@@ -598,12 +680,12 @@ async function demarrerSession() {
   ni.addEventListener("input", debounce(e => { if (e.target.value.trim().length > 2) rechercherAccession(); }, 350));
   setTimeout(() => ni.focus(), 100);
 }
-
+ 
 // ── Poursuite du scan une fois l'accession/souche résolue (code composite CODE-A) ──
 function continuerCompositeAvecAccession(acc, codeAcc, numMG, etapeCode) {
   const conflit = verifierContinuitePartenaire(acc.id, etapeCode);
   if (conflit) { afficherAlerte("alerte-scan", conflit, "erreur"); flashEcran("rouge"); return; }
-
+ 
   accessionCourante = { code: codeAcc, ...acc, codeMicrogreffeParent: numMG };
   document.getElementById("scan-nomIntro").textContent = acc.nomIntro;
   document.getElementById("scan-nomVar").textContent = acc.nomVar;
@@ -618,12 +700,12 @@ function continuerCompositeAvecAccession(acc, codeAcc, numMG, etapeCode) {
   configurerBoutons(etapeCode);
   preparerChampsSouche(acc.id, etapeCode);
   const alertesInfo = [alerteEchecAnterieur(acc.id)];
-  if (etapeCode === ETAPE_CONTROLE) alertesInfo.push(alerteControleAnterieur(acc.id, numMG));
+  if (etapeCode === ETAPE_CONTROLE) alertesInfo.push(alerteControleAnterieur(acc.id, numMG), alerteNbTubes(acc.id, etapeCode));
   const alertesFiltrees = alertesInfo.filter(Boolean);
   if (alertesFiltrees.length) afficherAlerte("alerte-scan", alertesFiltrees.join(" · "), "info");
   setTimeout(() => document.getElementById("btn-confirmer").focus(), 50);
 }
-
+ 
 // ── Poursuite du scan une fois l'accession/souche résolue (code simple CodeIntro) ──
 function continuerSimpleAvecAccession(acc, code, etapeCode) {
   if (ETAPES_COMPOSITE_M.includes(etapeCode)) {
@@ -632,7 +714,7 @@ function continuerSimpleAvecAccession(acc, code, etapeCode) {
     afficherAlerte("alerte-scan", `Veuillez scanner le code du tube (ex : ${code}-A).`, "info");
     return;
   }
-
+ 
   const multiSouche = !!souchesAProposer(acc.id, etapeCode); // souche choisie ensuite : contrôles faits à l'enregistrement
   if (!multiSouche && dejaScanneeDansSession(acc.id, etapeCode)) {
     accessionCourante = null;
@@ -641,7 +723,7 @@ function continuerSimpleAvecAccession(acc, code, etapeCode) {
     flashEcran("rouge");
     return;
   }
-
+ 
   const conflit = verifierContinuitePartenaire(acc.id, etapeCode);
   if (conflit) {
     accessionCourante = null;
@@ -649,7 +731,7 @@ function continuerSimpleAvecAccession(acc, code, etapeCode) {
     afficherAlerte("alerte-scan", conflit, "erreur"); flashEcran("rouge");
     return;
   }
-
+ 
   const msgRempotage = multiSouche ? null : blocageRempotageObligatoire(acc.id, etapeCode);
   if (msgRempotage) {
     accessionCourante = null;
@@ -657,7 +739,7 @@ function continuerSimpleAvecAccession(acc, code, etapeCode) {
     afficherAlerte("alerte-scan", msgRempotage, "erreur"); flashEcran("rouge");
     return;
   }
-
+ 
   accessionCourante = { code, ...acc };
   document.getElementById("scan-nomIntro").textContent = acc.nomIntro;
   document.getElementById("scan-nomVar").textContent = acc.nomVar;
@@ -676,13 +758,13 @@ function continuerSimpleAvecAccession(acc, code, etapeCode) {
   if (alertesInfo.length) afficherAlerte("alerte-scan", alertesInfo.join(" · "), "info");
   setTimeout(() => document.getElementById("btn-confirmer").focus(), 50);
 }
-
+ 
 function rechercherAccession() {
   const input = document.getElementById("scan-code").value.trim().toUpperCase();
   masquerAlerte("alerte-scan");
   if (!input) return;
   const etapeCode = codeEtapeParId(session.etape);
-
+ 
   // ── Détection code composite CODEACCESSION-A (Multiplication plante in vitro uniquement) ──
   // Le code M01 est stocké seul dans CodeMicrogreffe (sans le CodeIntro devant), mais l'opérateur
   // scanne le code composite (comme IFV) car c'est ce qui identifie physiquement le tube. Le tube
@@ -699,7 +781,7 @@ function rechercherAccession() {
     continuerCompositeAvecAccession(rechercheAcc.acc, codeAcc, numMG, etapeCode);
     return;
   }
-
+ 
   // ── Code simple (accession) ──
   const code = input;
   if (partiesMG && !ETAPES_COMPOSITE_M.includes(etapeCode)) {
@@ -725,7 +807,7 @@ function rechercherAccession() {
     }
   }
 }
-
+ 
 // ── Écrit des lignes Suivi2 ET les ajoute aussitôt à cacheSuivi ──
 // Sans cela, le cache n'était relu qu'au démarrage de la session : deux multiplications sur le même
 // tube (ou deux croissances sur la même accession) dans la même session repartaient de A-01 / A.
@@ -740,7 +822,7 @@ async function ecrireSuivi(actions) {
   });
   return result;
 }
-
+ 
 function annulerScan() {
   accessionCourante = null;
   document.getElementById("scan-code").value = "";
@@ -748,7 +830,7 @@ function annulerScan() {
   masquerAlerte("alerte-scan");
   document.getElementById("scan-code").focus();
 }
-
+ 
 // ════════════════════════════════════════════════
 //  IMPORT CSV — alternative au scan répété (session sans accès terrain au formulaire)
 //  Réutilise les mêmes fonctions de validation que le scan manuel (trouverAccession,
@@ -781,14 +863,30 @@ function parserCSV(texte) {
   const donnees = lignes.slice(1).map(parserLigne);
   return { entetes, donnees };
 }
-
-function indexColonne(entetes, nom) { return entetes.findIndex(h => h.toLowerCase() === nom.toLowerCase()); }
-
+ 
+// Compare les noms de colonnes sans tenir compte de la casse, des espaces (y compris insécables ou en fin de nom),
+// des accents, ni d'un éventuel BOM en début de fichier.
+function normaliserNomColonne(t) {
+  return String(t || "").replace(/^\uFEFF/, "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[\s\u00A0_-]+/g, "").toLowerCase();
+}
+function indexColonne(entetes, ...noms) {
+  const cibles = noms.map(normaliserNomColonne);
+  return entetes.findIndex(h => cibles.includes(normaliserNomColonne(h)));
+}
+ 
+// Lecture du CSV : UTF-8 d'abord (strict) ; si le fichier n'est pas en UTF-8 (cas d'Excel « CSV » classique,
+// encodé Windows-1252), repli sur Windows-1252 — sinon les caractères accentués sont abîmés.
+async function lireFichierCSV(fichier) {
+  const buf = await fichier.arrayBuffer();
+  try { return new TextDecoder("utf-8", { fatal: true }).decode(buf).replace(/^\uFEFF/, ""); }
+  catch (e) { return new TextDecoder("windows-1252").decode(buf); }
+}
+ 
 // ── Traite une ligne d'import : mêmes vérifications et mêmes écritures Grist qu'un scan manuel ──
 async function traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, commentaireBrut, etapeCode, soucheBrut = "") {
   const partiesMG = analyserCodeTube(codeBrut);
   let acc, accId, codeAffiche = codeBrut, codeMicrogreffeParent = null;
-
+ 
   if (ETAPES_COMPOSITE_M.includes(etapeCode)) {
     if (!partiesMG) return { ok: false, message: "Code composite attendu (ex : CODE-A) pour cette étape." };
     const codeAcc = partiesMG[1], numMG = partiesMG[2];
@@ -818,7 +916,7 @@ async function traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, co
     const msgRempotage = multiSouche ? null : blocageRempotageObligatoire(acc.id, etapeCode);
     if (msgRempotage) return { ok: false, message: msgRempotage };
   }
-
+ 
   let nbApex = null;
   if (ETAPES_NB_APEX_SIMPLE.includes(etapeCode)) {
     nbApex = parseInt(nbApexBrut);
@@ -834,7 +932,7 @@ async function traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, co
     nbBoutures = parseInt(nombreBrut);
     if (!nbBoutures || nbBoutures < 1) return { ok: false, message: "Colonne Nombre obligatoire (≥ 1) pour cette étape." };
   }
-
+ 
   // ── Souche(s) (colonne Souche du CSV) ──
   let souche = null;
   if (etapeCode === ETAPE_DEBOURREMENT) {
@@ -859,7 +957,7 @@ async function traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, co
       if (msgR) return { ok: false, message: msgR };
     }
   }
-
+ 
   const fieldsBase = {
     CodeIntro: accId, Methode: session.methode, Etape: session.etape,
     Date: Math.floor(new Date(session.date).getTime() / 1000), Operateur: session.operateur,
@@ -870,20 +968,20 @@ async function traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, co
   if (commentaireBrut) fieldsBase.Commentaires = commentaireBrut;
   if (ETAPES_NB_APEX_SIMPLE.includes(etapeCode)) fieldsBase.Quantite = nbApex;
   if (codeMicrogreffeParent && etapeCode !== ETAPE_MULT_PLANTES) fieldsBase.CodeMicrogreffe = codeMicrogreffeParent;
-
+ 
   const estEchec = reussite === "Échec" || reussite === "Non conforme";
-
+ 
   // ── Avertissements non bloquants (même logique que le scan manuel) ──
   let avertissement = null;
   if (ETAPES_COMPOSITE_M.includes(etapeCode)) {
     const av = [alerteEchecAnterieur(accId)];
-    if (etapeCode === ETAPE_CONTROLE) av.push(alerteControleAnterieur(accId, codeMicrogreffeParent));
+    if (etapeCode === ETAPE_CONTROLE) av.push(alerteControleAnterieur(accId, codeMicrogreffeParent), alerteNbTubes(accId, etapeCode));
     avertissement = av.filter(Boolean).join(" · ") || null;
   } else {
     const av = [alerteEtapeDejaFaite(accId, etapeCode, souche), alerteEchecAnterieur(accId)];
     avertissement = av.filter(Boolean).join(" · ") || null;
   }
-
+ 
   try {
     if (etapeCode === ETAPE_CROISSANCE_TUBE) {
       const actions = [];
@@ -904,7 +1002,7 @@ async function traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, co
     return { ok: false, message: "Erreur Grist : " + e.message };
   }
 }
-
+ 
 async function importerCSV() {
   const fichierInput = document.getElementById("import-fichier");
   const fichier = fichierInput.files[0];
@@ -912,24 +1010,24 @@ async function importerCSV() {
   if (!session.etape) return afficherAlerte("alerte-scan", "Session non démarrée.", "erreur");
   masquerAlerte("alerte-scan");
   document.getElementById("resultat-import").innerHTML = "";
-
-  const texte = await fichier.text();
+ 
+  const texte = await lireFichierCSV(fichier);
   const { entetes, donnees } = parserCSV(texte);
   const idxCode = indexColonne(entetes, "CodeIntro");
   const idxNombre = indexColonne(entetes, "Nombre");
   const idxReussite = indexColonne(entetes, "Reussite");
-  const idxNbApex = [indexColonne(entetes, "Quantite"), indexColonne(entetes, "Quantité"), indexColonne(entetes, "NbApex")].find(i => i !== -1) ?? -1; // NbApex : ancien nom, encore accepté
-  const idxCommentaire = indexColonne(entetes, "Commentaires");
+  const idxNbApex = indexColonne(entetes, "Quantite", "NbApex"); // NbApex : ancien nom, encore accepté
+  const idxCommentaire = indexColonne(entetes, "Commentaires", "Commentaire");
   const idxSouche = indexColonne(entetes, "Souche");
   if (idxCode === -1) return afficherAlerte("alerte-scan", 'Colonne "CodeIntro" introuvable dans le fichier.', "erreur");
   if (donnees.length === 0) return afficherAlerte("alerte-scan", "Fichier vide (aucune ligne de données).", "erreur");
-
+ 
   const etapeCode = codeEtapeParId(session.etape);
   const resultats = [];
   const btnImport = document.getElementById("btn-import");
   btnImport.disabled = true;
   btnImport.innerHTML = 'Import en cours <span class="spinner"></span>';
-
+ 
   for (let i = 0; i < donnees.length; i++) {
     const l = donnees[i];
     const numLigne = i + 2;
@@ -940,24 +1038,24 @@ async function importerCSV() {
     const nbApexBrut = idxNbApex !== -1 ? (l[idxNbApex] || "").trim() : "";
     const commentaireBrut = idxCommentaire !== -1 ? (l[idxCommentaire] || "").trim() : "";
     const soucheBrut = idxSouche !== -1 ? (l[idxSouche] || "").trim() : "";
-
+ 
     let reussite = null;
     if (/^échec$|^echec$/i.test(reussiteBrut)) reussite = "Échec";
     else if (/^non ?conforme$/i.test(reussiteBrut)) reussite = "Non conforme";
     else if (/^conforme$/i.test(reussiteBrut)) reussite = "Conforme";
     else if (reussiteBrut) { resultats.push({ ligne: numLigne, code: codeBrut, ok: false, message: `Valeur Reussite non reconnue : "${reussiteBrut}"` }); continue; }
-
+ 
     const res = await traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, commentaireBrut, etapeCode, soucheBrut);
     resultats.push({ ligne: numLigne, code: codeBrut, ok: res.ok, message: res.message, avertissement: res.avertissement });
   }
-
+ 
   btnImport.disabled = false;
   btnImport.textContent = "Importer";
   mettreAJourCompteur();
   afficherResultatImport(resultats);
   fichierInput.value = "";
 }
-
+ 
 function afficherResultatImport(resultats) {
   const nbOk = resultats.filter(r => r.ok).length;
   const nbErr = resultats.filter(r => !r.ok).length;
@@ -971,7 +1069,7 @@ function afficherResultatImport(resultats) {
   }
   document.getElementById("resultat-import").innerHTML = html;
 }
-
+ 
 async function enregistrerScan(reussite) {
   if (!accessionCourante || enRegistrement) return;
   const etapeCode = codeEtapeParId(session.etape);
@@ -1062,7 +1160,7 @@ async function enregistrerScan(reussite) {
   enRegistrement = false; bc.disabled = be.disabled = false;
   bc.textContent = "Confirmer ✓"; be.textContent = "Déclarer échec ✗";
 }
-
+ 
 function mettreAJourCompteur() {
   const nb = scansSession.filter(s => s.ok).length;
   const nbEchec = scansSession.filter(s => s.echec).length;
@@ -1076,7 +1174,7 @@ function mettreAJourCompteur() {
   }).reverse().join("");
   document.getElementById("section-historique").style.display = "block";
 }
-
+ 
 async function annulerDernierScan(index) {
   const scan = scansSession[index];
   if (!scan) return;
@@ -1092,15 +1190,15 @@ async function annulerDernierScan(index) {
     scansSession.splice(index, 1); mettreAJourCompteur();
   } catch(e) { afficherAlerte("alerte-scan", "Impossible d'annuler : " + e.message, "erreur"); }
 }
-
+ 
 function flashEcran(couleur) { const el = document.getElementById("flash"); el.className = "flash-overlay " + couleur + " actif"; setTimeout(() => el.classList.remove("actif"), 350); }
-
+ 
 function terminerSession() {
   const nb = scansSession.filter(s=>s.ok).length, nbEchec = scansSession.filter(s=>s.echec).length, nbErr = scansSession.filter(s=>!s.ok).length;
   document.getElementById("fin-resume").innerHTML = `<strong>Partenaire :</strong> ${PARTENAIRE_CONFIG.nom}<br><strong>Campagne :</strong> ${session.campagne}<br><strong>Étape :</strong> ${session.etapeNom}<br><strong>Méthode :</strong> ${session.methode}<br><strong>Date :</strong> ${session.date}<br><strong>Opérateur :</strong> ${session.operateurNom}<br><strong>Emplacement :</strong> ${session.emplacement}<br><strong>Scans enregistrés :</strong> ${nb}<br>${nbEchec>0?`<strong style="color:#e65100">Échecs :</strong> ${nbEchec}<br>`:""}${nbErr>0?`<strong style="color:var(--erreur)">Erreurs :</strong> ${nbErr}`:""}`;
   afficherEcran("ecran-fin");
 }
-
+ 
 function nouvelleSession() {
   session={}; scansSession=[]; accessionCourante=null; enRegistrement=false;
   document.getElementById("scan-code").value="";
@@ -1109,10 +1207,11 @@ function nouvelleSession() {
   document.getElementById("cfg-date").value=new Date().toISOString().split("T")[0];
   afficherEcran("ecran-config");
 }
-
+ 
 function afficherEcran(id) { document.querySelectorAll(".ecran").forEach(e=>e.classList.remove("actif")); document.getElementById(id).classList.add("actif"); window.scrollTo(0,0); }
 function afficherAlerte(id, msg, type) { const el=document.getElementById(id); el.textContent=msg; el.className="alerte "+type; }
 function masquerAlerte(id) { const el=document.getElementById(id); el.className="alerte"; el.textContent=""; }
 </script>
 </body>
 </html>
+ 
