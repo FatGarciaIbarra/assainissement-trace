@@ -97,25 +97,25 @@ tbody tr.ligne-cliquable { cursor: pointer; }
 <body>
 <div class="container">
   <div id="ecran-chargement" class="chargement">Connexion à Grist <span class="spinner"></span></div>
-
+ 
   <div id="ecran-principal" style="display:none">
     <h1>Tableau de bord — Assainissement vigne</h1>
     <div class="sous-titre">Lecture seule · toutes campagnes et partenaires confondus · données Suivi2/Accessions</div>
-
+ 
     <div class="onglets">
       <button class="onglet actif" data-onglet="vue">Vue d'ensemble</button>
       <button class="onglet" data-onglet="accessions">Accessions</button>
       <button class="onglet" data-onglet="tubes">Tubes &amp; boutures</button>
       <button class="onglet" data-onglet="alertes">Alertes</button>
     </div>
-
+ 
     <!-- ═══ VUE D'ENSEMBLE ═══ -->
     <div class="vue actif" id="vue-vue">
       <div class="cartes" id="cartes-ensemble"></div>
       <div class="section-titre">Accessions par partenaire titulaire × campagne</div>
       <div class="tableau-scroll"><table id="table-partenaire-campagne"></table></div>
     </div>
-
+ 
     <!-- ═══ ACCESSIONS ═══ -->
     <div class="vue" id="vue-accessions">
       <div class="filtres">
@@ -134,7 +134,7 @@ tbody tr.ligne-cliquable { cursor: pointer; }
       <div class="compte-lignes" id="compte-accessions"></div>
       <div class="tableau-scroll"><table id="table-accessions"></table></div>
     </div>
-
+ 
     <!-- ═══ TUBES & BOUTURES ═══ -->
     <div class="vue" id="vue-tubes">
       <div class="filtres">
@@ -152,7 +152,7 @@ tbody tr.ligne-cliquable { cursor: pointer; }
       <div class="compte-lignes" id="compte-tubes"></div>
       <div class="tableau-scroll"><table id="table-tubes"></table></div>
     </div>
-
+ 
     <!-- ═══ ALERTES ═══ -->
     <div class="vue" id="vue-alertes">
       <div class="section-titre">À reprogrammer (accessions à reprélever la campagne suivante)</div>
@@ -165,7 +165,7 @@ tbody tr.ligne-cliquable { cursor: pointer; }
       <div style="margin-top:12px"><button class="btn-export" onclick="exporterOnglet('alertes')">Exporter CSV (toutes les listes)</button></div>
     </div>
   </div>
-
+ 
   <div class="modal-overlay" id="modal-detail" onclick="if(event.target===this) fermerDetail()">
     <div class="modal-boite">
       <div class="modal-entete">
@@ -181,7 +181,7 @@ tbody tr.ligne-cliquable { cursor: pointer; }
     </div>
   </div>
 </div>
-
+ 
 <script>
 // ════════════════════════════════════════════════
 //  IDENTIFIANTS DE COLONNES GRIST (à ajuster ici si le schéma change)
@@ -189,7 +189,7 @@ tbody tr.ligne-cliquable { cursor: pointer; }
 const COL_VIROSE_1 = "Virose_court_noue";
 const COL_VIROSE_2 = "Virose_enroule";
 const COL_VIROSE_3 = "Virose_marb_cork_cann";
-
+ 
 const ETAPE_STOCKAGE = "STOCKAGE";
 const ETAPE_TRANSMISSION = "F_TRANSMISSION_INRAE";
 const ETAPE_RECEPTION = "RECEPTION";
@@ -207,12 +207,12 @@ function etapeEstAReprogrammer(etapeId) {
   const norm = t => (t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   return norm(codeEtape(etapeId)).includes("reprogram") || norm(cacheEtapes[etapeId] && cacheEtapes[etapeId].nom).includes("reprogram");
 }
-
+ 
 let cacheOperateurs = {}, cacheEtapes = {}, cacheAccessions = [], cacheSuivi = [];
 let ongletActif = "vue";
-
+ 
 grist.ready({ requiredAccess: "read table" });
-
+ 
 async function init() {
   try {
     await chargerDonnees();
@@ -234,7 +234,7 @@ async function init() {
   }
 }
 window.addEventListener("load", init);
-
+ 
 async function chargerDonnees() {
   const [ops, etapes, accs, suivi] = await Promise.all([
     grist.docApi.fetchTable("Operateurs"),
@@ -242,15 +242,15 @@ async function chargerDonnees() {
     grist.docApi.fetchTable("Accessions"),
     grist.docApi.fetchTable("Suivi2")
   ]);
-
+ 
   cacheOperateurs = {};
   ops.id.forEach((id, i) => { cacheOperateurs[id] = ops.NomOperateur[i] || "—"; });
-
+ 
   cacheEtapes = {};
   etapes.id.forEach((id, i) => {
     cacheEtapes[id] = { code: etapes.CodeEtape[i], nom: etapes.NomEtape[i], methode: etapes.Methode[i], ordre: etapes.OrdreAffichage[i] };
   });
-
+ 
   cacheAccessions = accs.id.map((id, i) => ({
     id,
     codeIntro: accs.CodeIntro[i] || "—",
@@ -263,7 +263,7 @@ async function chargerDonnees() {
     virose2: accs[COL_VIROSE_2] ? (accs[COL_VIROSE_2][i] || "—") : "—",
     virose3: accs[COL_VIROSE_3] ? (accs[COL_VIROSE_3][i] || "—") : "—"
   }));
-
+ 
   cacheSuivi = suivi.id.map((id, i) => ({
     id,
     codeIntroId: suivi.CodeIntro[i],
@@ -279,17 +279,17 @@ async function chargerDonnees() {
     codeMicrogreffe: suivi.CodeMicrogreffe ? suivi.CodeMicrogreffe[i] : null
   }));
 }
-
+ 
 function codeEtape(etapeId) { return cacheEtapes[etapeId] ? cacheEtapes[etapeId].code : null; }
 function nomEtape(etapeId)  { return cacheEtapes[etapeId] ? cacheEtapes[etapeId].nom  : (etapeId ? String(etapeId) : "—"); }
 function nomOperateur(id)   { return cacheOperateurs[id] || "—"; }
 function formatDate(ts)     { if (!ts) return "—"; const d = new Date(ts * 1000); return d.toLocaleDateString("fr-FR"); }
-
+ 
 // ── Historique / statut par accession (toutes campagnes traitées comme des lignes indépendantes) ──
 function historiqueAccession(accId) {
   return cacheSuivi.filter(r => r.codeIntroId === accId).sort((a,b) => a.date - b.date || a.id - b.id);
 }
-
+ 
 // Réplique la logique "partenaireActuel" des formulaires INRAE (partenaire titulaire courant),
 // généralisée à tous les partenaires : dernière RECEPTION réussie, tant qu'aucun CHGT_METHODE
 // n'a eu lieu depuis.
@@ -302,7 +302,7 @@ function partenaireTitulaire(accId) {
     (r.date > derniereReception.date || (r.date === derniereReception.date && r.id > derniereReception.id)));
   return chgtApres ? null : derniereReception.codePartenaire;
 }
-
+ 
 function statutAccession(acc) {
   const hist = historiqueAccession(acc.id);
   if (hist.length === 0) {
@@ -321,7 +321,7 @@ function statutAccession(acc) {
     titulaire: titulaire || "—"
   };
 }
-
+ 
 // ── Tubes / microgreffes / boutures : regroupés par (accession, code composite) ──
 function construireTubes() {
   const map = new Map();
@@ -345,7 +345,7 @@ function construireTubes() {
       codeIntroId: t.codeIntroId,
       code: t.code,
       // Bouture si un segment suit le tube (anciens codes "M01-MB01" ou nouveaux "µ01-A") ; sinon tube/microgreffe seul.
-      typeCode: t.code.includes("-") ? "Bouture/Microbouture" : "Tube/Microgreffe",
+      typeCode: /^(?:S\d+-)?(?:M\d+|µ\d+|[A-Za-z]+)-/.test(t.code) ? "Bouture/Microbouture" : "Tube/Microgreffe",
       statut,
       derniereEtape: nomEtape(dernier.etapeId),
       derniereDate: dernier.date,
@@ -353,12 +353,12 @@ function construireTubes() {
     };
   });
 }
-
+ 
 function accessionParId(id) { return cacheAccessions.find(a => a.id === id); }
-
+ 
 // ── Filtres : peuplement dynamique des options à partir des données réelles ──
 function optionsUniques(arr) { return [...new Set(arr.filter(v => v !== null && v !== undefined && v !== "—"))].sort(); }
-
+ 
 function initFiltres() {
   const partenaires = optionsUniques(cacheSuivi.map(r => r.codePartenaire));
   const campagnes = optionsUniques(cacheAccessions.map(a => a.campagne));
@@ -368,7 +368,7 @@ function initFiltres() {
   const v3 = optionsUniques(cacheAccessions.map(a => a.virose3));
   const statuts = ["Non réceptionné", "En cours", "Échec / Non conforme", STATUT_REPROG];
   const statutsTubes = ["En cours", "Stocké", "Transmis", "Mort (échec/non conforme)"];
-
+ 
   remplirSelect("f-acc-partenaire", partenaires);
   remplirSelect("f-acc-campagne", campagnes);
   remplirSelect("f-acc-type", types);
@@ -376,12 +376,12 @@ function initFiltres() {
   remplirSelect("f-acc-v1", v1);
   remplirSelect("f-acc-v2", v2);
   remplirSelect("f-acc-v3", v3);
-
+ 
   remplirSelect("f-tube-partenaire", partenaires);
   remplirSelect("f-tube-campagne", campagnes);
   remplirSelect("f-tube-statut", statutsTubes);
 }
-
+ 
 function remplirSelect(id, valeurs) {
   const sel = document.getElementById(id);
   const courant = sel.value;
@@ -391,19 +391,19 @@ function remplirSelect(id, valeurs) {
   valeurs.forEach(v => { const o = document.createElement("option"); o.value = v; o.textContent = v; sel.appendChild(o); });
   if (valeurs.includes(courant)) sel.value = courant;
 }
-
+ 
 function reinitialiserFiltres(prefixe) {
   document.querySelectorAll(`[id^="f-${prefixe}-"]`).forEach(el => { el.value = ""; });
   rafraichirTout();
 }
-
+ 
 function basculerOnglet(nom) {
   ongletActif = nom;
   document.querySelectorAll(".onglet").forEach(b => b.classList.toggle("actif", b.dataset.onglet === nom));
   document.querySelectorAll(".vue").forEach(v => v.classList.remove("actif"));
   document.getElementById("vue-" + nom).classList.add("actif");
 }
-
+ 
 // ── Construction des lignes filtrées (réutilisées par le rendu et l'export CSV) ──
 function lignesAccessionsFiltrees() {
   const recherche = document.getElementById("f-acc-recherche").value.trim().toUpperCase();
@@ -414,7 +414,7 @@ function lignesAccessionsFiltrees() {
   const fV1 = document.getElementById("f-acc-v1").value;
   const fV2 = document.getElementById("f-acc-v2").value;
   const fV3 = document.getElementById("f-acc-v3").value;
-
+ 
   return cacheAccessions
     .map(acc => ({ acc, s: statutAccession(acc) }))
     .filter(({ acc, s }) => {
@@ -436,14 +436,14 @@ function lignesAccessionsFiltrees() {
       derniereDate: formatDate(s.derniereDate)
     }));
 }
-
+ 
 function lignesTubesFiltrees() {
   const recherche = document.getElementById("f-tube-recherche").value.trim().toUpperCase();
   const fPartenaire = document.getElementById("f-tube-partenaire").value;
   const fCampagne = document.getElementById("f-tube-campagne").value;
   const fType = document.getElementById("f-tube-type").value;
   const fStatut = document.getElementById("f-tube-statut").value;
-
+ 
   return construireTubes()
     .map(t => ({ t, acc: accessionParId(t.codeIntroId) }))
     .filter(({ t, acc }) => {
@@ -461,7 +461,7 @@ function lignesTubesFiltrees() {
       derniereEtape: t.derniereEtape, derniereDate: formatDate(t.derniereDate), partenaire: t.dernierPartenaire
     }));
 }
-
+ 
 // ── Rendu ──
 function classeBadge(statut) {
   if (statut === "En cours") return "encours";
@@ -471,14 +471,14 @@ function classeBadge(statut) {
   if (statut === STATUT_REPROG) return "reprog"; // rouge
   return "echec"; // Échec / Non conforme / Mort : jaune
 }
-
+ 
 function rafraichirTout() {
   rendreVueEnsemble();
   rendreAccessions();
   rendreTubes();
   rendreAlertes();
 }
-
+ 
 function rendreVueEnsemble() {
   const statuts = cacheAccessions.map(statutAccession);
   const nbTotal = cacheAccessions.length;
@@ -488,7 +488,7 @@ function rendreVueEnsemble() {
   const nbReprog = statuts.filter(s => s.statut === STATUT_REPROG).length;
   const tubes = construireTubes();
   const nbTubesEnCours = tubes.filter(t => t.statut === "En cours").length;
-
+ 
   document.getElementById("cartes-ensemble").innerHTML = `
     <div class="carte"><div class="carte-valeur">${nbTotal}</div><div class="carte-label">Accessions (toutes campagnes)</div></div>
     <div class="carte"><div class="carte-valeur">${nbEnCours}</div><div class="carte-label">En cours</div></div>
@@ -498,7 +498,7 @@ function rendreVueEnsemble() {
     <div class="carte"><div class="carte-valeur">${tubes.length}</div><div class="carte-label">Tubes/boutures créés</div></div>
     <div class="carte alerte"><div class="carte-valeur">${nbTubesEnCours}</div><div class="carte-label">Tubes/boutures sans état terminal</div></div>
   `;
-
+ 
   const combinaisons = new Map();
   cacheAccessions.forEach(acc => {
     const s = statutAccession(acc);
@@ -513,7 +513,7 @@ function rendreVueEnsemble() {
     (lignes.length ? lignes.map(l => `<tr><td>${l.p}</td><td>${l.c}</td><td>${l.n}</td></tr>`).join("") : `<tr><td colspan="3" class="vide">Aucune donnée</td></tr>`) +
     `</tbody>`;
 }
-
+ 
 function rendreAccessions() {
   const lignes = lignesAccessionsFiltrees();
   document.getElementById("compte-accessions").textContent = `${lignes.length} accession(s)`;
@@ -531,7 +531,7 @@ function rendreAccessions() {
     </tr>`).join("") : `<tr><td colspan="13" class="vide">Aucune accession ne correspond aux filtres</td></tr>`) +
     `</tbody>`;
 }
-
+ 
 function rendreTubes() {
   const lignes = lignesTubesFiltrees();
   document.getElementById("compte-tubes").textContent = `${lignes.length} tube(s)/bouture(s)`;
@@ -544,7 +544,7 @@ function rendreTubes() {
     </tr>`).join("") : `<tr><td colspan="7" class="vide">Aucun tube ne correspond aux filtres</td></tr>`) +
     `</tbody>`;
 }
-
+ 
 function rendreAlertes() {
   const reprogAcc = cacheAccessions.map(acc => ({ acc, s: statutAccession(acc) })).filter(({ s }) => s.statut === STATUT_REPROG)
     .map(({ acc, s }) => ({ id: acc.id, codeIntro: acc.codeIntro, campagne: acc.campagne, derniereEtape: s.derniereEtape, derniereDate: formatDate(s.derniereDate), partenaire: s.dernierPartenaire }));
@@ -560,7 +560,7 @@ function rendreAlertes() {
     (echecsAcc.length ? echecsAcc.map(l => `<tr class="ligne-cliquable" onclick="ouvrirDetailAccession(${l.id})"><td>${l.codeIntro}</td><td>${l.campagne}</td><td>${l.derniereEtape}</td><td>${l.derniereDate}</td><td>${l.partenaire}</td></tr>`).join("")
       : `<tr><td colspan="5" class="vide">Aucun échec/non-conformité en dernière action</td></tr>`) +
     `</tbody>`;
-
+ 
   const orphelins = construireTubes().filter(t => t.statut === "En cours").map(t => {
     const acc = accessionParId(t.codeIntroId);
     return { codeIntroId: t.codeIntroId, codeIntro: acc ? acc.codeIntro : "—", campagne: acc ? acc.campagne : "—", code: t.code, typeCode: t.typeCode, derniereEtape: t.derniereEtape, derniereDate: formatDate(t.derniereDate), partenaire: t.dernierPartenaire };
@@ -571,7 +571,7 @@ function rendreAlertes() {
       : `<tr><td colspan="7" class="vide">Aucun tube/bouture sans état terminal</td></tr>`) +
     `</tbody>`;
 }
-
+ 
 // ── Export CSV (séparateur ";" + BOM UTF-8 pour compatibilité Excel FR) ──
 function echapperCSV(v) {
   if (v === null || v === undefined) return "";
@@ -589,7 +589,7 @@ function telechargerCSV(nomFichier, colonnes, lignes) {
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
-
+ 
 function exporterOnglet(nom) {
   const horodatage = new Date().toISOString().slice(0, 10);
   if (nom === "accessions") {
@@ -622,14 +622,14 @@ function exporterOnglet(nom) {
     ], [...reprogAcc, ...echecsAcc, ...orphelins]);
   }
 }
-
+ 
 // ── Détail d'une accession : historique complet (accession + tubes/boutures confondus) ──
 function ouvrirDetailAccession(accId) {
   const acc = accessionParId(accId);
   if (!acc) return;
   const s = statutAccession(acc);
   const hist = historiqueAccession(accId);
-
+ 
   document.getElementById("modal-titre").textContent = `${acc.codeIntro} — ${acc.nomIntro}`;
   document.getElementById("modal-soustitre").textContent = `${acc.nomVar} · Campagne ${acc.campagne}`;
   document.getElementById("modal-infos").innerHTML = `
@@ -641,7 +641,7 @@ function ouvrirDetailAccession(accId) {
     <div><span>Enroulement</span>${acc.virose2}</div>
     <div><span>Marbrure/Corky/Cann.</span>${acc.virose3}</div>
   `;
-
+ 
   document.getElementById("modal-table-historique").innerHTML =
     `<thead><tr><th>Date</th><th>Étape</th><th>Code tube/bouture</th><th>Souche</th><th>Quantité</th><th>Partenaire</th><th>Opérateur</th><th>Résultat</th><th>Emplacement</th><th>Commentaires</th></tr></thead><tbody>` +
     (hist.length ? hist.map(r => `<tr>
@@ -650,15 +650,16 @@ function ouvrirDetailAccession(accId) {
       <td>${r.reussite || "—"}</td><td>${r.emplacement || "—"}</td><td>${r.commentaires || "—"}</td>
     </tr>`).join("") : `<tr><td colspan="10" class="vide">Aucune ligne enregistrée</td></tr>`) +
     `</tbody>`;
-
+ 
   document.getElementById("modal-detail").classList.add("actif");
 }
-
+ 
 function fermerDetail() {
   document.getElementById("modal-detail").classList.remove("actif");
 }
-
+ 
 document.addEventListener("keydown", e => { if (e.key === "Escape") fermerDetail(); });
 </script>
 </body>
 </html>
+ 
