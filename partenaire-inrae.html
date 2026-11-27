@@ -174,7 +174,9 @@ textarea { resize: vertical; min-height: 60px; }
     </div>
     <div class="section" id="section-historique" style="display:none">
       <div class="section-titre">Scans de la session <span id="nb-scans-titre" style="font-weight:400;opacity:0.7"></span></div>
-      <div class="section-corps"><div class="liste-scans" id="liste-scans"></div></div>
+      <div class="section-corps"><div class="liste-scans" id="liste-scans"></div>
+        <div class="btns" style="margin-top:10px"><button class="btn btn-secondaire" onclick="exporterEtiquettes()">⬇ Exporter les étiquettes (CSV Printack)</button></div>
+        <div id="alerte-etiquettes" class="alerte"></div></div>
     </div>
     <div class="btns"><button class="btn btn-secondaire" onclick="terminerSession()">Terminer la session</button></div>
   </div>
@@ -184,7 +186,7 @@ textarea { resize: vertical; min-height: 60px; }
       <div class="section-titre">Session terminée</div>
       <div class="section-corps"><div class="config-resume" id="fin-resume"></div></div>
     </div>
-    <div class="btns"><button class="btn btn-principal" onclick="nouvelleSession()">Nouvelle session</button></div>
+    <div class="btns"><button class="btn btn-secondaire" onclick="exporterEtiquettes()">⬇ Exporter les étiquettes (CSV Printack)</button><button class="btn btn-principal" onclick="nouvelleSession()">Nouvelle session</button></div>
   </div>
 </div>
  
@@ -235,6 +237,63 @@ function analyserCodeTube(input) {
   if (cacheAccessions[input]) return null;
   return input.match(RE_TUBE_CODE);
 }
+// Étiquette « CodeIntro-S3 » (accession + souche, étapes Réception → Régénération) :
+// retourne [codeIntro, souche] si l'entrée est de cette forme et que CodeIntro existe ; null sinon.
+function analyserCodeSouche(input) {
+  if (cacheAccessions[input]) return null;
+  const m = input.match(/^(.+)-(S\d+)$/);
+  return m && cacheAccessions[m[1]] && SOUCHES_DISPONIBLES.includes(m[2]) ? [m[1], m[2]] : null;
+}
+// Présélectionne la souche lue sur l'étiquette (cases à cocher ou liste déroulante selon l'étape).
+function appliquerSoucheScannee(souche) {
+  if (!souche || !accessionCourante) return;
+  const cb = [...document.querySelectorAll("#souches-cases input")].find(i => i.value === souche);
+  if (cb) { document.querySelectorAll("#souches-cases input").forEach(i => i.checked = false); cb.checked = true; }
+  const sel = document.getElementById("scan-souche");
+  if (document.getElementById("champ-souche-etape").style.display !== "none" && [...sel.options].some(o => o.value === souche)) {
+    sel.value = souche; if (sel.onchange) sel.onchange({ target: sel });
+  }
+}
+ 
+// ── Export CSV pour Printack : une ligne = une étiquette ──
+// Réception → Régénération (lignes sans code de tube) : étiquette CodeIntro[-Souche], une par souche.
+// À partir de la Croissance en tube (lignes avec CodeMicrogreffe) : code complet CodeIntro[-Souche]-Apex[-Bouture].
+// Colonnes : CodeIntro;NomIntro;CodeVar;NomVar;Souche;Apex;Bouture + CodeQR (texte exact à encoder dans le QR code).
+function accessionParId(id) {
+  for (const [code, l] of Object.entries(cacheAccessions)) { const a = l.find(x => x.id === id); if (a) return { code, ...a }; }
+  return null;
+}
+function lignesEtiquettes() {
+  const ids = new Set();
+  scansSession.filter(sc => sc.ok).forEach(sc => { (sc.gristIds || []).forEach(i => ids.add(i)); if (sc.gristId) ids.add(sc.gristId); });
+  const vus = new Set(), out = [];
+  cacheSuivi.filter(r => ids.has(r.id)).forEach(r => {
+    const a = accessionParId(r.codeIntroId); if (!a) return;
+    let souche = r.souche || "", apex = "", bouture = "", qr = a.code;
+    if (r.codeMicrogreffe) {
+      let t = r.codeMicrogreffe;
+      const m = t.match(/^(S\d+)-(.+)$/);
+      if (m) { souche = m[1]; t = m[2]; }
+      const p = t.split("-"); apex = p[0]; bouture = p.slice(1).join("-");
+      qr = a.code + "-" + r.codeMicrogreffe;
+    } else if (/^S\d+$/.test(souche)) qr = a.code + "-" + souche;
+    if (vus.has(qr)) return; vus.add(qr);
+    out.push([a.code, a.nomIntro === "—" ? "" : a.nomIntro, a.codeVar || "", a.nomVar === "—" ? "" : a.nomVar, souche, apex, bouture, qr]);
+  });
+  return out;
+}
+function exporterEtiquettes() {
+  const lignes = lignesEtiquettes();
+  if (!lignes.length) { afficherAlerte("alerte-etiquettes", "Aucune étiquette à exporter pour cette session.", "info"); return; }
+  const esc = v => { v = String(v ?? ""); return /[";\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const csv = "\uFEFF" + [["CodeIntro","NomIntro","CodeVar","NomVar","Souche","Apex","Bouture","CodeQR"], ...lignes].map(l => l.map(esc).join(";")).join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  a.download = `etiquettes_${(session.etapeNom || "session").replace(/[^A-Za-z0-9]+/g, "_")}_${session.date || ""}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  afficherAlerte("alerte-etiquettes", `✓ ${lignes.length} étiquette${lignes.length > 1 ? "s" : ""} exportée${lignes.length > 1 ? "s" : ""}.`, "succes");
+}
+ 
 function lettreDepuisIndex(n) {
   let s = "";
   while (n > 0) { n--; s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26); }
@@ -325,6 +384,12 @@ function verifierQuantiteCroissance(accId, souche, nbTubes) {
   if (dejaEnTube + nbTubes <= limite) return null;
   const reste = Math.max(limite - dejaEnTube, 0);
   return `Croissance en tube : ${nbTubes} apex dépasse ce qui reste (${limite} apex ${source}, ${dejaEnTube} déjà en tube, ${reste} restant${reste > 1 ? "s" : ""}).`;
+}
+// Accession dont une seule souche S1…S10 a été utilisée au débourrement : cette souche est reprise d'office (sans question)
+// pour les tubes de la Croissance en tube, afin que le code du tube la porte (S3-A).
+function soucheUniqueAccession(accId) {
+  const u = soucheUtilisees(accId);
+  return u.length === 1 ? u[0] : null;
 }
 // Souche d'un tube : celle choisie lors de la Croissance en tube (tube ou bouture "A-01" → tube "A").
 function soucheDuTube(accId, tube) {
@@ -445,7 +510,7 @@ async function chargerDonnees() {
       const c = accs.CodeIntro[i];
       if (!c) return;
       const code = c.toUpperCase();
-      const entree = { id, nomIntro: accs.NomIntro[i] || "—", nomVar: accs.NomVar[i] || "—", campagne: accs.Campagne[i] || null };
+      const entree = { id, nomIntro: accs.NomIntro[i] || "—", nomVar: accs.NomVar[i] || "—", codeVar: accs.CodeVar ? (accs.CodeVar[i] || "") : "", campagne: accs.Campagne[i] || null };
       if (!cacheAccessions[code]) cacheAccessions[code] = [];
       cacheAccessions[code].push(entree);
     });
@@ -821,7 +886,8 @@ function rechercherAccession() {
   }
  
   // ── Code simple (accession) ──
-  const code = input;
+  const psEtiq = partiesMG ? null : analyserCodeSouche(input);
+  const code = psEtiq ? psEtiq[0] : input;
   if (partiesMG && !ETAPES_COMPOSITE_M.includes(etapeCode)) {
     // Un code composite a été scanné hors étape Multiplication/Contrôle : on le signale plutôt
     // que de le traiter comme un CodeIntro invalide.
@@ -832,6 +898,7 @@ function rechercherAccession() {
   const rechercheAcc = trouverAccession(code);
   if (rechercheAcc.statut === "ok") {
     continuerSimpleAvecAccession(rechercheAcc.acc, code, etapeCode);
+    if (psEtiq) appliquerSoucheScannee(psEtiq[1]);
   } else {
     accessionCourante = null;
     document.getElementById("scan-info-bloc").style.display = "none";
@@ -922,6 +989,8 @@ async function lireFichierCSV(fichier) {
  
 // ── Traite une ligne d'import : mêmes vérifications et mêmes écritures Grist qu'un scan manuel ──
 async function traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, commentaireBrut, etapeCode, soucheBrut = "") {
+  const psEtiq = analyserCodeSouche(String(codeBrut).toUpperCase());
+  if (psEtiq && !ETAPES_COMPOSITE_M.includes(etapeCode)) { codeBrut = psEtiq[0]; if (!soucheBrut) soucheBrut = psEtiq[1]; }
   const partiesMG = analyserCodeTube(codeBrut);
   let acc, accId, codeAffiche = codeBrut, codeMicrogreffeParent = null;
  
@@ -1010,6 +1079,7 @@ async function traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, co
     if (msgQ) return { ok: false, message: msgQ };
   }
   if (etapeCode === ETAPE_CROISSANCE_TUBE) {
+    if (!souche) souche = soucheUniqueAccession(accId); // souche unique : portée par les tubes
     const msgQ = verifierQuantiteCroissance(accId, souche, nbLignes);
     if (msgQ) return { ok: false, message: msgQ };
   }
@@ -1179,6 +1249,7 @@ async function enregistrerScan(reussite) {
     if (msgQ) return afficherAlerte("alerte-scan", msgQ, "erreur");
   }
   if (etapeCode === ETAPE_CROISSANCE_TUBE) {
+    if (!souche) souche = soucheUniqueAccession(accessionCourante.id); // souche unique : portée par les tubes
     const msgQ = verifierQuantiteCroissance(accessionCourante.id, souche, nbLignes);
     if (msgQ) return afficherAlerte("alerte-scan", msgQ, "erreur");
   }
@@ -1202,12 +1273,15 @@ async function enregistrerScan(reussite) {
     fieldsBase.CodeMicrogreffe = accessionCourante.codeMicrogreffeParent;
   }
   const estEchec = reussite === "Échec" || reussite === "Non conforme";
+  let codesCrees = null; // codes complets (à scanner / imprimer) des tubes créés
   try {
     if (etapeCode === ETAPE_CROISSANCE_TUBE) {
       // Génère automatiquement une ligne Suivi2 par apex, codée par lettres : CODE-A, CODE-B, …
       // (même colonne CodeMicrogreffe que les microgreffes IFV), en un seul lot d'actions.
       const actions = [];
-      prochainsCodesTubes(accessionCourante.id, nbLignes, souche).forEach(c => actions.push(["AddRecord", "Suivi2", null, { ...fieldsBase, CodeMicrogreffe: c }]));
+      const codesTubes = prochainsCodesTubes(accessionCourante.id, nbLignes, souche);
+      codesCrees = codesTubes.map(c => accessionCourante.code + "-" + c);
+      codesTubes.forEach(c => actions.push(["AddRecord", "Suivi2", null, { ...fieldsBase, CodeMicrogreffe: c }]));
       const result = await ecrireSuivi(actions);
       const gristIds = result.retValues;
       scansSession.push({ code: accessionCourante.code, nom: accessionCourante.nomIntro, ok: true, souche: souche || null, echec: estEchec, gristIds, accId: accessionCourante.id, etapeCode, nbLignes });
@@ -1225,6 +1299,7 @@ async function enregistrerScan(reussite) {
       scansSession.push({ code: accessionCourante.code, nom: accessionCourante.nomIntro, ok: true, souche: souche || null, echec: estEchec, ...(result.retValues.length > 1 ? { gristIds: result.retValues } : { gristId: result.retValues[0] }), accId: accessionCourante.id, etapeCode });
     }
     mettreAJourCompteur(); flashEcran(estEchec ? "rouge" : "vert"); annulerScan();
+    if (codesCrees) afficherAlerte("alerte-scan", `✓ ${codesCrees.length} tube${codesCrees.length > 1 ? "s" : ""} créé${codesCrees.length > 1 ? "s" : ""} — codes complets à scanner : ${codesCrees.length > 6 ? codesCrees.slice(0, 3).join(", ") + " … " + codesCrees.slice(-2).join(", ") : codesCrees.join(", ")}`, "succes");
     if ((etapeCode === ETAPE_RECEPTION || etapeCode === ETAPE_DEBOURREMENT) && !souche) afficherAlerte("alerte-scan", `⚠️ ${etapeCode === ETAPE_RECEPTION ? "Réception" : "Débourrement"} enregistré${etapeCode === ETAPE_RECEPTION ? "e" : ""} sans souche : pensez à la renseigner quand la donnée sera connue.`, "info");
   } catch(e) {
     scansSession.push({ code: accessionCourante.code, nom: accessionCourante.nomIntro, ok: false, echec: false });
