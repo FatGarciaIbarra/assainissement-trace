@@ -166,7 +166,7 @@ textarea { resize: vertical; min-height: 60px; }
       <div class="section-corps">
         <div class="champ"><label>Fichier</label><input type="file" id="import-fichier" accept=".csv"></div>
         <div style="font-size:11px;color:var(--texte-2);margin-bottom:10px;line-height:1.6">
-          Colonnes : <strong>CodeIntro</strong> (obligatoire, ou <code>CodeIntro-A</code> (code du tube) pour Multiplication/Contrôle — les anciens codes <code>CodeIntro-M01</code> restent reconnus , <strong>Nombre</strong> (Croissance en tube / Multiplication uniquement), <strong>Reussite</strong> (vide = confirmé/conforme, sinon <code>Echec</code>, <code>NonConforme</code> ou <code>Conforme</code>), <strong>Quantite</strong> (Cryothérapie / Régénération méristèmes uniquement : nombre d'apex traités ; l'ancien nom <code>NbApex</code> reste accepté), <strong>Souche</strong> (Réception : souches réceptionnées ; Débourrement : souches utilisées parmi celles réceptionnées, S1 à S10, séparées par <code>+</code> ex. <code>S1+S3</code>, ou <code>Pot</code> pour une accession de serre ; autres étapes : une seule souche, uniquement si plusieurs souches ont été utilisées au débourrement), <strong>Commentaires</strong>.
+          Colonnes : <strong>CodeIntro</strong> (obligatoire, ou <code>CodeIntro-A</code> (code du tube ; <code>CodeIntro-S3-A</code> pour une accession à plusieurs souches) pour Multiplication/Contrôle — les anciens codes <code>CodeIntro-M01</code> restent reconnus , <strong>Nombre</strong> (Croissance en tube / Multiplication uniquement), <strong>Reussite</strong> (vide = confirmé/conforme, sinon <code>Echec</code>, <code>NonConforme</code> ou <code>Conforme</code>), <strong>Quantite</strong> (Cryothérapie / Régénération méristèmes uniquement : nombre d'apex traités ; l'ancien nom <code>NbApex</code> reste accepté), <strong>Souche</strong> (Réception : souches réceptionnées ; Débourrement : souches utilisées parmi celles réceptionnées, S1 à S10, séparées par <code>+</code> ex. <code>S1+S3</code>, ou <code>Pot</code> pour une accession de serre ; autres étapes : une seule souche, uniquement si plusieurs souches ont été utilisées au débourrement), <strong>Commentaires</strong>.
         </div>
         <div class="btns"><button class="btn btn-principal" id="btn-import" onclick="importerCSV()">Importer</button></div>
         <div id="resultat-import"></div>
@@ -226,7 +226,9 @@ const ETAPES_COMPOSITE_M = [ETAPE_MULT_PLANTES, ETAPE_CONTROLE];
 // Nouveaux codes : tube de Croissance en tube = lettre(s) A, B, C… (puis AA, AB… après Z) ;
 // bouture de Multiplication in vitro = tube + numéro à 2 chiffres : A-01, A-02…
 // Les anciens codes déjà enregistrés (tube M01, bouture M01-MB01) ne sont pas renommés : ils restent reconnus.
-const RE_TUBE_CODE = /^(.+)-(M\d+|[A-Za-z]+)$/;
+// Tube : lettres (A, B…), éventuellement précédées de la souche quand l'accession en a plusieurs (S3-A, S4-A…) — la souche
+// fait alors partie du code du tube mais pas du CodeIntro. Ancien format M01 toujours reconnu.
+const RE_TUBE_CODE = /^(.+?)-((?:S\d+-)?(?:M\d+|[A-Za-z]+))$/;
 // Retourne [complet, codeAccession, tube] si l'entrée est un code de tube ; null sinon.
 // Si l'entrée entière est déjà un CodeIntro connu (ex. un code contenant un tiret), c'est un code simple.
 function analyserCodeTube(input) {
@@ -242,12 +244,16 @@ function indexDepuisLettre(l) {
   return [...l].reduce((acc, c) => acc * 26 + (c.charCodeAt(0) - 64), 0);
 }
 // Codes de tubes (lettres) à créer pour une accession : continue après la dernière lettre déjà utilisée.
-function prochainsCodesTubes(accId, nb) {
+// Accession à plusieurs souches : le code est préfixé par la souche (S3-A, S3-B…) et les lettres repartent à A pour chaque souche.
+function prochainsCodesTubes(accId, nb, souche = null) {
+  const prefixe = souche ? String(souche).toUpperCase() + "-" : "";
   const existants = cacheSuivi
-    .filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) === ETAPE_CROISSANCE_TUBE && r.codeMicrogreffe && /^[A-Z]+$/.test(r.codeMicrogreffe))
-    .map(r => indexDepuisLettre(r.codeMicrogreffe));
+    .filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) === ETAPE_CROISSANCE_TUBE && r.codeMicrogreffe)
+    .map(r => String(r.codeMicrogreffe).toUpperCase())
+    .filter(c => prefixe ? (c.startsWith(prefixe) && /^[A-Z]+$/.test(c.slice(prefixe.length))) : /^[A-Z]+$/.test(c))
+    .map(c => indexDepuisLettre(c.slice(prefixe.length)));
   const depart = existants.length ? Math.max(...existants) : 0;
-  return Array.from({ length: nb }, (_, i) => lettreDepuisIndex(depart + i + 1));
+  return Array.from({ length: nb }, (_, i) => prefixe + lettreDepuisIndex(depart + i + 1));
 }
 // ── Souches (S1 à S10) ──
 // Toute l'accession est réceptionnée en une seule ligne Accessions. Au DÉBOURREMENT (bouturage), on indique
@@ -319,9 +325,14 @@ function verifierQuantiteCroissance(accId, souche, nbTubes) {
 }
 // Souche d'un tube : celle choisie lors de la Croissance en tube (tube ou bouture "A-01" → tube "A").
 function soucheDuTube(accId, tube) {
-  const tubeRacine = String(tube || "").split("-")[0];
-  const ligne = cacheSuivi.find(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) === ETAPE_CROISSANCE_TUBE && r.codeMicrogreffe === tubeRacine && r.souche);
-  return ligne ? ligne.souche : null;
+  // tube = code du tube (A, S3-A, M01) ou d'une bouture (A-01, S3-A-01, M01-MB01) : on retrouve la ligne de Croissance en tube
+  // dont le code est le plus long préfixe de ce code.
+  const t = String(tube || "");
+  const candidates = cacheSuivi.filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) === ETAPE_CROISSANCE_TUBE && r.codeMicrogreffe && r.souche
+    && (t === r.codeMicrogreffe || t.startsWith(r.codeMicrogreffe + "-")));
+  if (!candidates.length) return null;
+  candidates.sort((x, y) => y.codeMicrogreffe.length - x.codeMicrogreffe.length);
+  return candidates[0].souche;
 }
 // Faut-il demander la souche à cette étape ? Retourne la liste des souches proposables, ou null.
 function souchesAProposer(accId, etapeCode) {
@@ -1023,7 +1034,7 @@ async function traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, co
   try {
     if (etapeCode === ETAPE_CROISSANCE_TUBE) {
       const actions = [];
-      prochainsCodesTubes(accId, nbLignes).forEach(c => actions.push(["AddRecord", "Suivi2", null, { ...fieldsBase, CodeMicrogreffe: c }]));
+      prochainsCodesTubes(accId, nbLignes, souche).forEach(c => actions.push(["AddRecord", "Suivi2", null, { ...fieldsBase, CodeMicrogreffe: c }]));
       const result = await ecrireSuivi(actions);
       scansSession.push({ code: codeAffiche, nom: acc.nomIntro, ok: true, souche: souche || null, echec: estEchec, gristIds: result.retValues, accId, etapeCode, nbLignes });
     } else if (etapeCode === ETAPE_MULT_PLANTES) {
@@ -1187,7 +1198,7 @@ async function enregistrerScan(reussite) {
       // Génère automatiquement une ligne Suivi2 par apex, codée par lettres : CODE-A, CODE-B, …
       // (même colonne CodeMicrogreffe que les microgreffes IFV), en un seul lot d'actions.
       const actions = [];
-      prochainsCodesTubes(accessionCourante.id, nbLignes).forEach(c => actions.push(["AddRecord", "Suivi2", null, { ...fieldsBase, CodeMicrogreffe: c }]));
+      prochainsCodesTubes(accessionCourante.id, nbLignes, souche).forEach(c => actions.push(["AddRecord", "Suivi2", null, { ...fieldsBase, CodeMicrogreffe: c }]));
       const result = await ecrireSuivi(actions);
       const gristIds = result.retValues;
       scansSession.push({ code: accessionCourante.code, nom: accessionCourante.nomIntro, ok: true, souche: souche || null, echec: estEchec, gristIds, accId: accessionCourante.id, etapeCode, nbLignes });
