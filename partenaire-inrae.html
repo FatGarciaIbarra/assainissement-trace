@@ -285,6 +285,38 @@ function actionsParSouche(fieldsBase, etapeCode) {
   if (liste.length <= 1) return [["AddRecord", "Suivi2", null, fieldsBase]];
   return liste.map(x => ["AddRecord", "Suivi2", null, { ...fieldsBase, Souche: x }]);
 }
+// ── Régénération des méristèmes : le total d'apex régénérés ne peut pas dépasser celui traité en Cryothérapie ──
+// Comparaison par accession (et par souche quand la ligne en porte une). Cumul de toutes les saisies : plusieurs régénérations
+// successives s'additionnent. Si aucune cryothérapie avec quantité n'est enregistrée, la vérification est impossible : on laisse passer.
+function verifierQuantiteRegeneration(accId, souche, nbApex) {
+  const memeSouche = r => !souche || !r.souche || parserSouches(r.souche).includes(String(souche).toUpperCase());
+  const lignes = (code) => cacheSuivi.filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) === code && memeSouche(r));
+  const cryo = lignes(ETAPE_CRYOTHERAPIE).filter(r => typeof r.quantite === "number");
+  if (!cryo.length) return null;
+  const totalCryo = cryo.reduce((t, r) => t + r.quantite, 0);
+  const dejaRegen = lignes(ETAPE_REGEN_MERISTE).filter(r => typeof r.quantite === "number").reduce((t, r) => t + r.quantite, 0);
+  if (dejaRegen + nbApex <= totalCryo) return null;
+  const reste = Math.max(totalCryo - dejaRegen, 0);
+  return `Régénération : ${nbApex} apex dépasse ce qui reste après la Cryothérapie (${totalCryo} apex traités, ${dejaRegen} déjà régénérés, ${reste} restant${reste > 1 ? "s" : ""}).`;
+}
+// ── Croissance en tube : le total de tubes ne peut pas dépasser le nombre d'apex régénérés ──
+// (à défaut de régénération avec quantité enregistrée, le nombre d'apex traités en Cryothérapie). Cumul de toutes les saisies
+// (les tubes déjà créés comptent), par accession et par souche quand la ligne en porte une. Aucune quantité connue : la
+// vérification est impossible et la saisie passe.
+function verifierQuantiteCroissance(accId, souche, nbTubes) {
+  const memeSouche = r => !souche || !r.souche || parserSouches(r.souche).includes(String(souche).toUpperCase());
+  const lignes = (code) => cacheSuivi.filter(r => r.codeIntroId === accId && codeEtapeParId(r.etapeId) === code && memeSouche(r));
+  const somme = (code) => lignes(code).filter(r => typeof r.quantite === "number").reduce((t, r) => t + r.quantite, 0);
+  const aQuantite = (code) => lignes(code).some(r => typeof r.quantite === "number");
+  let limite, source;
+  if (aQuantite(ETAPE_REGEN_MERISTE)) { limite = somme(ETAPE_REGEN_MERISTE); source = "régénérés"; }
+  else if (aQuantite(ETAPE_CRYOTHERAPIE)) { limite = somme(ETAPE_CRYOTHERAPIE); source = "traités en Cryothérapie"; }
+  else return null;
+  const dejaEnTube = lignes(ETAPE_CROISSANCE_TUBE).filter(r => r.codeMicrogreffe).length;
+  if (dejaEnTube + nbTubes <= limite) return null;
+  const reste = Math.max(limite - dejaEnTube, 0);
+  return `Croissance en tube : ${nbTubes} apex dépasse ce qui reste (${limite} apex ${source}, ${dejaEnTube} déjà en tube, ${reste} restant${reste > 1 ? "s" : ""}).`;
+}
 // Souche d'un tube : celle choisie lors de la Croissance en tube (tube ou bouture "A-01" → tube "A").
 function soucheDuTube(accId, tube) {
   const tubeRacine = String(tube || "").split("-")[0];
@@ -412,6 +444,7 @@ async function chargerDonnees() {
       codePartenaire:  suivi.CodePartenaire[i],
       reussite:        suivi.Reussite[i],
       souche:          suivi.Souche ? suivi.Souche[i] : null,
+      quantite:        suivi.Quantite ? suivi.Quantite[i] : (suivi.NbApex ? suivi.NbApex[i] : null), // NbApex = ancien nom
       date:            suivi.Date[i],
       codeMicrogreffe: suivi.CodeMicrogreffe ? suivi.CodeMicrogreffe[i] : null
     }));
@@ -660,6 +693,7 @@ async function demarrerSession() {
       id, codeIntroId: suivi.CodeIntro[i], etapeId: suivi.Etape[i],
       codePartenaire: suivi.CodePartenaire[i], reussite: suivi.Reussite[i], date: suivi.Date[i],
       souche: suivi.Souche ? suivi.Souche[i] : null,
+      quantite: suivi.Quantite ? suivi.Quantite[i] : (suivi.NbApex ? suivi.NbApex[i] : null),
       codeMicrogreffe: suivi.CodeMicrogreffe ? suivi.CodeMicrogreffe[i] : null
     }));
   } catch(e) { console.warn("Impossible de recharger Suivi2 :", e); }
@@ -807,7 +841,7 @@ async function ecrireSuivi(actions) {
     const f = act[3] || {};
     cacheSuivi.push({
       id: result.retValues[i], codeIntroId: f.CodeIntro, etapeId: f.Etape, codePartenaire: f.CodePartenaire || null,
-      reussite: f.Reussite || null, date: f.Date, souche: f.Souche || null, codeMicrogreffe: f.CodeMicrogreffe || null
+      reussite: f.Reussite || null, date: f.Date, souche: f.Souche || null, quantite: f.Quantite ?? null, codeMicrogreffe: f.CodeMicrogreffe || null
     });
   });
   return result;
@@ -951,6 +985,15 @@ async function traiterLigneImport(codeBrut, nombreBrut, reussite, nbApexBrut, co
       const msgR = blocageRempotageObligatoire(accId, etapeCode, souche);
       if (msgR) return { ok: false, message: msgR };
     }
+  }
+ 
+  if (etapeCode === ETAPE_REGEN_MERISTE) {
+    const msgQ = verifierQuantiteRegeneration(accId, souche, nbApex);
+    if (msgQ) return { ok: false, message: msgQ };
+  }
+  if (etapeCode === ETAPE_CROISSANCE_TUBE) {
+    const msgQ = verifierQuantiteCroissance(accId, souche, nbLignes);
+    if (msgQ) return { ok: false, message: msgQ };
   }
  
   const fieldsBase = {
@@ -1110,6 +1153,14 @@ async function enregistrerScan(reussite) {
       return afficherAlerte("alerte-scan", `Cette accession a déjà été enregistrée à cette étape pour la souche ${souche} dans la session en cours.`, "erreur");
     const msgR = blocageRempotageObligatoire(accessionCourante.id, etapeCode, souche);
     if (msgR) return afficherAlerte("alerte-scan", msgR, "erreur");
+  }
+  if (etapeCode === ETAPE_REGEN_MERISTE) {
+    const msgQ = verifierQuantiteRegeneration(accessionCourante.id, souche, nbApex);
+    if (msgQ) return afficherAlerte("alerte-scan", msgQ, "erreur");
+  }
+  if (etapeCode === ETAPE_CROISSANCE_TUBE) {
+    const msgQ = verifierQuantiteCroissance(accessionCourante.id, souche, nbLignes);
+    if (msgQ) return afficherAlerte("alerte-scan", msgQ, "erreur");
   }
   enRegistrement = true;
   const bc = document.getElementById("btn-confirmer"), be = document.getElementById("btn-echec");
